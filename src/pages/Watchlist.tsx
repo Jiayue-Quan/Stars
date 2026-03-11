@@ -4,6 +4,7 @@ import { Check, Clock, Filter, Grid3X3, Heart, List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { MovieCard, PosterImage, VerdictBadge } from '@/components/ui-custom';
+import { movies as localMovies } from '@/data/movies';
 import { fetchMoviesByRouteIds } from '@/lib/tmdb-movies';
 import { getUserLibrary } from '@/lib/user-library';
 import type { Movie, ViewMode, WatchlistTab } from '@/types';
@@ -41,7 +42,10 @@ export function Watchlist() {
 
       setIsLoading(true);
       try {
-        const movies = await fetchMoviesByRouteIds(ids);
+        const localMatches = localMovies.filter((movie) => ids.includes(movie.id));
+        const remoteMatches = await fetchMoviesByRouteIds(ids.filter((movieId) => movieId.startsWith('tmdb-')));
+        const movieMap = new Map([...localMatches, ...remoteMatches].map((movie) => [movie.id, movie]));
+        const movies = ids.map((id) => movieMap.get(id)).filter((movie): movie is Movie => Boolean(movie));
         if (!cancelled) {
           setLoadedMovies(movies);
         }
@@ -83,9 +87,9 @@ export function Watchlist() {
   }, [selectedVerdict, tabMovies, underTwoHours]);
 
   const tabs: { id: WatchlistTab; label: string; icon: React.ElementType; count: number }[] = [
-    { id: 'watchlist', label: 'Watchlist', icon: Check, count: library.watchlist.filter((id) => id.startsWith('tmdb-')).length },
-    { id: 'watched', label: 'Watched', icon: Clock, count: library.watched.filter((id) => id.startsWith('tmdb-')).length },
-    { id: 'favorites', label: 'Favorites', icon: Heart, count: library.favorites.filter((id) => id.startsWith('tmdb-')).length },
+    { id: 'watchlist', label: 'Watchlist', icon: Check, count: library.watchlist.length },
+    { id: 'watched', label: 'Watched', icon: Clock, count: library.watched.length },
+    { id: 'favorites', label: 'Favorites', icon: Heart, count: library.favorites.length },
   ];
 
   return (
@@ -94,7 +98,7 @@ export function Watchlist() {
         <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <h1 className="heading-display text-3xl md:text-4xl">Your Watchlist</h1>
-            <p className="mt-2 text-muted-foreground">Saved TMDB titles only. Old local catalog items are ignored.</p>
+            <p className="mt-2 text-muted-foreground">Saved movies from the live TMDB feed and the full local browse catalog.</p>
           </div>
 
           <div className="flex overflow-hidden rounded-lg border border-white/10">
@@ -146,7 +150,7 @@ export function Watchlist() {
         </div>
 
         {isLoading ? (
-          <div className="py-20 text-center text-muted-foreground">Loading saved TMDB movies...</div>
+          <div className="py-20 text-center text-muted-foreground">Loading saved movies...</div>
         ) : filteredMovies.length > 0 ? (
           <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1'}`}>
             {filteredMovies.map((movie) =>
@@ -177,9 +181,9 @@ export function Watchlist() {
               <Check className="h-8 w-8 text-muted-foreground" />
             </div>
             <h3 className="mb-2 text-xl font-semibold">
-              {activeTab === 'watchlist' ? 'Your watchlist is empty' : activeTab === 'watched' ? 'No watched TMDB titles yet' : 'No favorite TMDB titles yet'}
+              {activeTab === 'watchlist' ? 'Your watchlist is empty' : activeTab === 'watched' ? 'No watched titles yet' : 'No favorite titles yet'}
             </h3>
-            <p className="mb-6 text-muted-foreground">Save movies from the live TMDB home or browse pages to populate this view.</p>
+            <p className="mb-6 text-muted-foreground">Save movies from Browse, Home, or Lists to populate this view.</p>
             <Button onClick={() => navigate('/browse')} className="btn-primary">Browse Movies</Button>
           </div>
         )}
