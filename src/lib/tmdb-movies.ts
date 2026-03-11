@@ -1,3 +1,4 @@
+import { browseStreamingPlatforms } from '@/lib/movie-constants';
 import type { Movie, Review } from '@/types';
 import { getTmdbImageUrl, tmdbFetch } from '@/lib/tmdb';
 
@@ -40,18 +41,38 @@ type TmdbMovieDetails = TmdbMovieSummary & {
 type TmdbListResponse = {
   page: number;
   total_pages: number;
+  total_results: number;
   results: TmdbMovieSummary[];
+};
+
+type TmdbPersonSearchResponse = {
+  page: number;
+  results: Array<{ id: number; name: string; known_for_department?: string }>;
 };
 
 type BrowseFilters = {
   query?: string;
   genres?: string[];
   decades?: number[];
-  minScore?: number;
-  maxScore?: number;
+  minRating?: number;
+  releaseYearMin?: number;
+  releaseYearMax?: number;
+  exactYear?: number;
   minRuntime?: number;
   maxRuntime?: number;
-  sortBy?: 'newest' | 'oldest' | 'topRated' | 'popular';
+  country?: string;
+  streamingPlatforms?: string[];
+  directorQuery?: string;
+  castQuery?: string;
+  page?: number;
+  sortBy?: 'newest' | 'highestRated' | 'mostPopular' | 'releaseDate' | 'mostReviewed';
+};
+
+type BrowsePage = {
+  movies: Movie[];
+  page: number;
+  totalPages: number;
+  totalResults: number;
 };
 
 type HomeFeed = {
@@ -108,7 +129,27 @@ const collectionDefinitions: TmdbCollection[] = [
 ];
 
 let genreMapPromise: Promise<Map<number, string>> | null = null;
+let reverseGenreMapPromise: Promise<Map<string, number>> | null = null;
 const detailCache = new Map<number, Promise<{ movie: Movie; review: Review; similarMovies: Movie[] }>>();
+const browseMovieCache = new Map<number, Promise<Movie>>();
+const personSearchCache = new Map<string, Promise<number[]>>();
+
+const countryNameToCode: Record<string, string> = {
+  USA: 'US',
+  UK: 'GB',
+  France: 'FR',
+  Germany: 'DE',
+  Japan: 'JP',
+  'South Korea': 'KR',
+  Spain: 'ES',
+  Italy: 'IT',
+  Canada: 'CA',
+  Australia: 'AU',
+  Brazil: 'BR',
+  'New Zealand': 'NZ',
+};
+
+const providerLabelToId = new Map(browseStreamingPlatforms.map((platform) => [platform.label, platform.value]));
 
 function toTmdbMovieId(id: number) {
   return `tmdb-${id}`;
@@ -147,6 +188,16 @@ async function getGenreMap() {
   return genreMapPromise;
 }
 
+async function getReverseGenreMap() {
+  if (!reverseGenreMapPromise) {
+    reverseGenreMapPromise = getGenreMap().then((genreMap) => {
+      return new Map(Array.from(genreMap.entries()).map(([id, name]) => [name.toLowerCase(), id]));
+    });
+  }
+
+  return reverseGenreMapPromise;
+}
+
 function mapCountry(details?: TmdbMovieDetails, movie?: TmdbMovieSummary) {
   if (details?.production_countries?.[0]?.name) return details.production_countries[0].name;
   const code = movie?.original_language ?? 'en';
@@ -173,9 +224,12 @@ function mapSummaryMovie(movie: TmdbMovieSummary, genreMap: Map<number, string>)
     tmdbId: movie.id,
     title: movie.title,
     year,
+    releaseDate: movie.release_date,
     genres: genres.length ? genres : ['Drama'],
     verdict: scoreToVerdict(score),
     score,
+    reviewCount: movie.vote_count,
+    popularity: movie.popularity,
     poster: movie.poster_path ? getTmdbImageUrl(movie.poster_path, 'w780') : '',
     backdrop: movie.backdrop_path ? getTmdbImageUrl(movie.backdrop_path, 'w1280') : '',
     director: 'TMDB',
@@ -209,6 +263,49 @@ function mapDetailedMovie(details: TmdbMovieDetails, genreMap: Map<number, strin
     language: mapLanguage(details, details),
     trailerUrl: buildTrailerUrl(details),
   };
+}
+
+async function searchPeopleIds(query: string, department: 'Directing' | 'Acting') {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return [];
+
+  const cacheKey = `${department}:${normalizedQuery}`;
+  if (!personSearchCache.has(cacheKey)) {
+    personSearchCache.set(
+      cacheKey,
+      tmdbFetch<TmdbPersonSearchResponse>('/search/person', {
+        query: {
+          query,
+          page: 1,
+          include_adult: false,
+        },
+      }).then((response) =>
+        response.results
+          .filter((person) =>
+            department === 'Directing'
+              ? person.known_for_department === 'Directing'
+              : person.known_for_department === 'Acting',
+          )
+          .slice(0, 5)
+          .map((person) => person.id),
+      ),
+    );
+  }
+
+  return personSearchCache.get(cacheKey)!;
+}
+
+async function fetchBrowseMovieDetails(tmdbId: number, genreMap: Map<number, string>) {
+  if (!browseMovieCache.has(tmdbId)) {
+    browseMovieCache.set(
+      tmdbId,
+      tmdbFetch<TmdbMovieDetails>(`/movie/${tmdbId}`, {
+        query: { append_to_response: 'credits' },
+      }).then((details) => mapDetailedMovie(details, genreMap)),
+    );
+  }
+
+  return browseMovieCache.get(tmdbId)!;
 }
 
 function buildSyntheticReview(movie: Movie): Review {
@@ -276,37 +373,124 @@ export async function fetchHomeFeed(): Promise<HomeFeed> {
 
 export async function fetchBrowseMovies(filters: BrowseFilters) {
   const genreMap = await getGenreMap();
-  const hasSearch = Boolean(filters.query?.trim());
+  const page = filters.page ?? 1;
 
-  const query: Record<string, string | number | boolean | undefined> = hasSearch
+  const [reverseGenreMap, directorIds, castIds] = await Promise.all([
+    getReverseGenreMap(),
+    filters.directorQuery ? searchPeopleIds(filters.directorQuery, 'Directing') : Promise.resolve([]),
+    filters.castQuery ? searchPeopleIds(filters.castQuery, 'Acting') : Promise.resolve([]),
+  ]);
+
+  const genreIds = (filters.genres ?? [])
+    .map((genre) => reverseGenreMap.get(genre.toLowerCase()))
+    .filter((genreId): genreId is number => typeof genreId === 'number');
+
+  const providerIds = (filters.streamingPlatforms ?? [])
+    .map((platform) => providerLabelToId.get(platform))
+    .filter((providerId): providerId is string => Boolean(providerId));
+
+  const sortBy =
+    filters.sortBy === 'highestRated'
+      ? 'vote_average.desc'
+      : filters.sortBy === 'mostPopular'
+        ? 'popularity.desc'
+        : filters.sortBy === 'mostReviewed'
+          ? 'vote_count.desc'
+          : filters.sortBy === 'releaseDate'
+            ? 'primary_release_date.asc'
+            : 'primary_release_date.desc';
+
+  if (filters.genres?.length && !genreIds.length) {
+    return { movies: [], page: 1, totalPages: 1, totalResults: 0 } satisfies BrowsePage;
+  }
+
+  if (filters.directorQuery?.trim() && !directorIds.length) {
+    return { movies: [], page: 1, totalPages: 1, totalResults: 0 } satisfies BrowsePage;
+  }
+
+  if (filters.castQuery?.trim() && !castIds.length) {
+    return { movies: [], page: 1, totalPages: 1, totalResults: 0 } satisfies BrowsePage;
+  }
+
+  const hasPersonSearchConstraint =
+    Boolean(filters.directorQuery?.trim() && directorIds.length) || Boolean(filters.castQuery?.trim() && castIds.length);
+
+  const useSearchEndpoint = Boolean(filters.query?.trim()) && !hasPersonSearchConstraint && !genreIds.length && !(filters.streamingPlatforms?.length) && !filters.country;
+
+  const query: Record<string, string | number | boolean | undefined> = useSearchEndpoint
     ? {
         query: filters.query?.trim(),
         include_adult: false,
+        page,
       }
     : {
         include_adult: false,
-        sort_by:
-          filters.sortBy === 'topRated'
-            ? 'vote_average.desc'
-            : filters.sortBy === 'oldest'
-              ? 'primary_release_date.asc'
-              : filters.sortBy === 'popular'
-                ? 'popularity.desc'
-                : 'primary_release_date.desc',
+        page,
+        with_genres: genreIds.length ? genreIds.join('|') : undefined,
+        with_cast: castIds.length ? castIds.join('|') : undefined,
+        with_crew: directorIds.length ? directorIds.join('|') : undefined,
+        'vote_count.gte': filters.minRating !== undefined && filters.minRating > 0 ? 50 : undefined,
+        'vote_average.gte': filters.minRating !== undefined && filters.minRating > 0 ? filters.minRating : undefined,
+        'primary_release_date.gte': filters.releaseYearMin ? `${filters.releaseYearMin}-01-01` : undefined,
+        'primary_release_date.lte': filters.releaseYearMax ? `${filters.releaseYearMax}-12-31` : undefined,
+        primary_release_year: filters.exactYear || undefined,
+        'with_runtime.gte': filters.minRuntime || undefined,
+        'with_runtime.lte': filters.maxRuntime && filters.maxRuntime < 240 ? filters.maxRuntime : undefined,
+        with_origin_country: filters.country ? countryNameToCode[filters.country] : undefined,
+        with_watch_providers: providerIds.length ? providerIds.join('|') : undefined,
+        watch_region: providerIds.length ? 'US' : undefined,
+        sort_by: sortBy,
       };
 
-  const response = hasSearch
+  const response = useSearchEndpoint
     ? await tmdbFetch<TmdbListResponse>('/search/movie', { query })
     : await tmdbFetch<TmdbListResponse>('/discover/movie', { query });
 
-  const mapped = response.results.map((movie) => mapSummaryMovie(movie, genreMap));
+  const detailedMovies = await Promise.all(
+    response.results.map((movie) => fetchBrowseMovieDetails(movie.id, genreMap).catch(() => mapSummaryMovie(movie, genreMap))),
+  );
 
-  return mapped
-    .filter((movie) => (filters.genres?.length ? movie.genres.some((genre) => filters.genres?.includes(genre)) : true))
+  const normalizedQuery = filters.query?.trim().toLowerCase();
+  const filtered = detailedMovies
+    .filter((movie) => (normalizedQuery
+      ? [
+          movie.title,
+          movie.synopsis,
+          movie.director,
+          movie.country,
+          movie.language,
+          movie.genres.join(' '),
+          movie.cast.join(' '),
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery)
+      : true))
     .filter((movie) => (filters.decades?.length ? filters.decades.includes(movie.decade) : true))
-    .filter((movie) => (filters.minScore !== undefined ? movie.score >= filters.minScore : true))
-    .filter((movie) => (filters.maxScore !== undefined ? movie.score <= filters.maxScore : true))
-    .slice(0, 30);
+    .filter((movie) => (filters.exactYear ? movie.year === filters.exactYear : true))
+    .filter((movie) =>
+      filters.directorQuery?.trim()
+        ? movie.director.toLowerCase().includes(filters.directorQuery.trim().toLowerCase())
+        : true,
+    )
+    .filter((movie) =>
+      filters.castQuery?.trim()
+        ? movie.cast.some((member) => member.toLowerCase().includes(filters.castQuery!.trim().toLowerCase()))
+        : true,
+    );
+
+  return {
+    movies: filtered,
+    page: response.page,
+    totalPages: response.total_pages,
+    totalResults: response.total_results,
+  } satisfies BrowsePage;
+}
+
+export async function fetchTrendingMovies(limit = 6) {
+  const genreMap = await getGenreMap();
+  const response = await tmdbFetch<TmdbListResponse>('/trending/movie/week');
+  return response.results.slice(0, limit).map((movie) => mapSummaryMovie(movie, genreMap));
 }
 
 export async function fetchTmdbMovieByRouteId(routeId: string) {

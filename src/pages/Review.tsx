@@ -4,8 +4,9 @@ import { AlertTriangle, Bookmark, Play, Share2, ThumbsDown, ThumbsUp } from 'luc
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { PosterImage, ScoreRing, VerdictBadge } from '@/components/ui-custom';
+import { getMovieById, getReviewByMovieId, movies as localMovies } from '@/data/movies';
 import { buildYouTubeSearchUrl, openExternalUrl, shareUrl } from '@/lib/browser';
-import { fetchTmdbMovieByRouteId } from '@/lib/tmdb-movies';
+import { fetchTmdbMovieByRouteId, isTmdbMovieId } from '@/lib/tmdb-movies';
 import { getUserLibrary, toggleLibraryItem } from '@/lib/user-library';
 import type { Movie, Review as ReviewType } from '@/types';
 
@@ -29,19 +30,36 @@ export function Review() {
       setIsLoading(true);
       setLoadError('');
       try {
-        const response = await fetchTmdbMovieByRouteId(id);
-        if (!cancelled && response) {
-          setMovie(response.movie);
-          setReview(response.review);
-          setSimilarMovies(response.similarMovies);
+        if (isTmdbMovieId(id)) {
+          const response = await fetchTmdbMovieByRouteId(id);
+          if (!cancelled && response) {
+            setMovie(response.movie);
+            setReview(response.review);
+            setSimilarMovies(response.similarMovies);
+            return;
+          }
         }
-        if (!cancelled && !response) {
-          setLoadError('This page only supports TMDB-backed movies.');
+
+        const localMovie = getMovieById(id);
+        if (!cancelled && localMovie) {
+          setMovie(localMovie);
+          setReview(getReviewByMovieId(id) ?? null);
+          setSimilarMovies(
+            localMovies
+              .filter((entry) => entry.id !== localMovie.id && entry.genres.some((genre) => localMovie.genres.includes(genre)))
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 6),
+          );
+          return;
+        }
+
+        if (!cancelled) {
+          setLoadError('This title is not available in the current catalog.');
         }
       } catch (error) {
-        console.error('Failed to load TMDB movie', error);
+        console.error('Failed to load movie', error);
         if (!cancelled) {
-          setLoadError('Failed to load live movie data from TMDB.');
+          setLoadError('Failed to load movie data.');
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -72,7 +90,7 @@ export function Review() {
         <div className="section-panel w-full max-w-lg px-6 py-10 text-center">
           <p className="section-kicker">Unavailable</p>
           <h1 className="heading-display mt-3 text-4xl text-white">Movie not available</h1>
-          <p className="mt-4 text-sm text-muted-foreground">{loadError || 'This title could not be loaded from TMDB.'}</p>
+          <p className="mt-4 text-sm text-muted-foreground">{loadError || 'This title could not be loaded from the current catalog.'}</p>
           <Button onClick={() => navigate('/browse')} className="btn-primary mt-6">
             Browse Movies
           </Button>

@@ -1,7 +1,9 @@
-﻿import { useState } from 'react';
-import { Bookmark, Play } from 'lucide-react';
+import { useState } from 'react';
+import { Bookmark, Eye, Heart, MessageSquareText, PenSquare, Play, Star, Users } from 'lucide-react';
 import type { Movie } from '@/types';
 import { getPosterFallback, resolvePosterUrl } from '@/lib/posters';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { PosterImage } from './PosterImage';
 import { VerdictBadge } from './VerdictBadge';
 
 interface MovieCardProps {
@@ -9,16 +11,41 @@ interface MovieCardProps {
   variant?: 'default' | 'compact' | 'horizontal' | 'hero';
   onClick?: () => void;
   onSave?: () => void;
+  onToggleWatchlist?: () => void;
+  onToggleLike?: () => void;
+  onWriteReview?: () => void;
+  onViewDetails?: () => void;
+  onGenreClick?: (genre: string) => void;
   showRank?: number;
+  isInWatchlist?: boolean;
+  isLiked?: boolean;
 }
 
-export function MovieCard({ movie, variant = 'default', onClick, onSave, showRank }: MovieCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [imageError, setImageError] = useState(false);
+function getReviewCount(movie: Movie) {
+  if (movie.reviewCount && movie.reviewCount > 0) return movie.reviewCount;
+  return Math.max(48, Math.round(movie.score * 420 + Math.max(0, new Date().getFullYear() - movie.year) * 12));
+}
 
-  const posterUrl = imageError
-    ? getPosterFallback(movie.title)
-    : resolvePosterUrl(movie.poster, movie.title);
+export function MovieCard({
+  movie,
+  variant = 'default',
+  onClick,
+  onSave,
+  onToggleWatchlist,
+  onToggleLike,
+  onWriteReview,
+  onViewDetails,
+  onGenreClick,
+  showRank,
+  isInWatchlist = false,
+  isLiked = false,
+}: MovieCardProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const posterUrl = resolvePosterUrl(movie.poster, movie.title) || getPosterFallback(movie.title);
+  const primaryGenres = movie.genres.slice(0, 2).join(' / ');
+  const reviewCount = getReviewCount(movie);
+  const reviewCountLabel = `${reviewCount.toLocaleString()} reviews`;
 
   if (variant === 'horizontal') {
     return (
@@ -39,18 +66,23 @@ export function MovieCard({ movie, variant = 'default', onClick, onSave, showRan
         }}
       >
         <div className="relative h-28 w-20 flex-shrink-0 overflow-hidden rounded-lg">
-          <img
-            src={posterUrl}
-            alt={movie.title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            onError={() => setImageError(true)}
-          />
+          <PosterImage src={posterUrl} title={movie.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
         </div>
         <div className="min-w-0 flex-1 py-1">
           <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-[#f4b684]">
             {movie.title}
           </h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">{movie.year} - {movie.director}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">{movie.year} / {primaryGenres || movie.director}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Star className="h-3.5 w-3.5 text-[#f4b684]" />
+              {movie.score.toFixed(1)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <MessageSquareText className="h-3.5 w-3.5 text-[#f4b684]" />
+              {reviewCountLabel}
+            </span>
+          </div>
           <div className="mt-2">
             <VerdictBadge verdict={movie.verdict} score={movie.score} size="sm" />
           </div>
@@ -61,79 +93,161 @@ export function MovieCard({ movie, variant = 'default', onClick, onSave, showRan
 
   if (variant === 'compact') {
     return (
-      <div
-        onClick={onClick}
-        className="group relative cursor-pointer"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <div
-          className="relative aspect-[2/3] overflow-hidden rounded-[1.45rem] border border-white/10"
-          style={{
-            background: 'linear-gradient(145deg, rgba(28, 21, 18, 0.9) 0%, rgba(17, 13, 11, 0.96) 100%)',
-            boxShadow: isHovered
-              ? '0 34px 62px -24px rgba(0, 0, 0, 0.72)'
-              : '0 18px 36px -22px rgba(0, 0, 0, 0.58)',
-            transform: isHovered ? 'translateY(-6px)' : 'translateY(0)',
-          }}
-        >
-          <img
-            src={posterUrl}
-            alt={movie.title}
-            className="h-full w-full object-cover transition-all duration-500"
-            style={{ transform: isHovered ? 'scale(1.08)' : 'scale(1)' }}
-            onError={() => setImageError(true)}
-          />
-
+      <HoverCard openDelay={120} closeDelay={80}>
+        <HoverCardTrigger asChild>
           <div
-            className={`absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+            onClick={onClick}
+            className="group relative cursor-pointer"
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
           >
-            <div className="absolute bottom-0 left-0 right-0 p-4">
-              <VerdictBadge verdict={movie.verdict} score={movie.score} size="sm" />
-            </div>
-          </div>
-
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/45 to-transparent" />
-
-          {onSave && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSave();
-              }}
-              className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full transition-all duration-300 ${
-                isHovered ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
-              }`}
-              style={{ background: 'rgba(14, 11, 10, 0.72)', backdropFilter: 'blur(8px)' }}
-            >
-              <Bookmark className="h-4 w-4" />
-            </button>
-          )}
-
-          {showRank && (
             <div
-              className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
+              className="relative aspect-[2/3] overflow-hidden rounded-[1.45rem] border border-white/10"
               style={{
-                background: 'linear-gradient(135deg, #d26d47 0%, #9f472a 100%)',
-                boxShadow: '0 0 20px rgba(210, 109, 71, 0.34)',
+                background: 'linear-gradient(145deg, rgba(28, 21, 18, 0.9) 0%, rgba(17, 13, 11, 0.96) 100%)',
+                boxShadow: isHovered
+                  ? '0 34px 62px -24px rgba(0, 0, 0, 0.72)'
+                  : '0 18px 36px -22px rgba(0, 0, 0, 0.58)',
+                transform: isHovered ? 'translateY(-6px)' : 'translateY(0)',
               }}
             >
-              {showRank}
+              <PosterImage src={posterUrl} title={movie.title} className="h-full w-full object-cover transition-all duration-500" loading="lazy" />
+
+              <div
+                className={`absolute inset-0 bg-gradient-to-t from-black via-black/55 to-transparent transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+              >
+                <div className="absolute inset-x-0 bottom-0 p-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      {
+                        label: isInWatchlist ? 'Saved' : 'Watchlist',
+                        icon: Bookmark,
+                        onPress: onToggleWatchlist ?? onSave,
+                        active: isInWatchlist,
+                      },
+                      {
+                        label: 'Write Review',
+                        icon: PenSquare,
+                        onPress: onWriteReview,
+                        active: false,
+                      },
+                      {
+                        label: 'View Details',
+                        icon: Eye,
+                        onPress: onViewDetails ?? onClick,
+                        active: false,
+                      },
+                      {
+                        label: isLiked ? 'Liked' : 'Like',
+                        icon: Heart,
+                        onPress: onToggleLike,
+                        active: isLiked,
+                      },
+                    ].map((action) => (
+                      <button
+                        key={action.label}
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          action.onPress?.();
+                        }}
+                        className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold transition-all ${
+                          action.active
+                            ? 'border-[#d26d47]/50 bg-[#d26d47]/20 text-[#f7c59e]'
+                            : 'border-white/15 bg-black/35 text-white hover:border-white/30 hover:bg-black/50'
+                        }`}
+                      >
+                        <action.icon className={`h-3.5 w-3.5 ${action.active ? 'fill-current' : ''}`} />
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <VerdictBadge verdict={movie.verdict} score={movie.score} size="sm" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/45 to-transparent" />
+
+              {showRank && (
+                <div
+                  className="absolute left-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
+                  style={{
+                    background: 'linear-gradient(135deg, #d26d47 0%, #9f472a 100%)',
+                    boxShadow: '0 0 20px rgba(210, 109, 71, 0.34)',
+                  }}
+                >
+                  {showRank}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        <div className="mt-3 px-1">
-          <h3 className="truncate text-[1.02rem] font-semibold text-foreground transition-colors group-hover:text-[#f4b684]">
-            {movie.title}
-          </h3>
-          <div className="mt-1.5 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">{movie.year}</span>
-            <span className="rounded-full border border-[#d26d47]/25 bg-[#d26d47]/10 px-2.5 py-1 text-xs font-bold text-[#f4b684]">
-              {movie.score.toFixed(1)}
-            </span>
+            <div className="mt-3 px-1">
+              <h3 className="line-clamp-1 text-[1.02rem] font-semibold text-foreground transition-colors group-hover:text-[#f4b684]">
+                {movie.title}
+              </h3>
+              <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                {movie.year} / {primaryGenres || movie.country}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#d26d47]/25 bg-[#d26d47]/10 px-2.5 py-1 font-bold text-[#f4b684]">
+                  <Star className="h-3.5 w-3.5" />
+                  {movie.score.toFixed(1)}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#f4b684]/20 bg-[#f4b684]/10 px-2.5 py-1 text-[11px] font-semibold text-[#f9d0b0]">
+                  <Users className="h-3.5 w-3.5" />
+                  {reviewCountLabel}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {movie.genres.slice(0, 3).map((genre) => (
+                  <button
+                    key={genre}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onGenreClick?.(genre);
+                    }}
+                    className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-[#d26d47]/40 hover:text-[#f4b684]"
+                  >
+                    {genre}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </HoverCardTrigger>
+        <HoverCardContent
+          side="right"
+          align="start"
+          className="w-80 rounded-[1.35rem] border border-white/10 bg-[#110e14]/96 p-4 text-white shadow-2xl backdrop-blur-xl"
+        >
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-[#f4b684]">Quick Preview</p>
+              <h4 className="mt-2 text-lg font-semibold">{movie.title}</h4>
+              <p className="mt-1 text-sm text-white/65">
+                {movie.year} / {movie.runtime ? `${movie.runtime} min` : 'Runtime pending'}
+              </p>
+            </div>
+            <p className="line-clamp-4 text-sm leading-6 text-white/75">{movie.synopsis}</p>
+            <div className="grid gap-2 rounded-2xl border border-white/8 bg-white/[0.04] p-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/50">Director</span>
+                <span className="text-right font-medium">{movie.director}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/50">Cast</span>
+                <span className="text-right font-medium">{movie.cast.slice(0, 3).join(', ') || 'Unknown'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/50">Reviews</span>
+                <span className="text-right font-medium">{reviewCountLabel}</span>
+              </div>
+            </div>
+          </div>
+        </HoverCardContent>
+      </HoverCard>
     );
   }
 
@@ -152,13 +266,7 @@ export function MovieCard({ movie, variant = 'default', onClick, onSave, showRan
             boxShadow: '0 30px 60px -15px rgba(0, 0, 0, 0.6)',
           }}
         >
-          <img
-            src={posterUrl}
-            alt={movie.title}
-            className="h-full w-full object-cover transition-all duration-700"
-            style={{ transform: isHovered ? 'scale(1.1)' : 'scale(1)' }}
-            onError={() => setImageError(true)}
-          />
+          <PosterImage src={posterUrl} title={movie.title} className="h-full w-full object-cover transition-all duration-700" />
 
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
 
@@ -215,13 +323,7 @@ export function MovieCard({ movie, variant = 'default', onClick, onSave, showRan
           boxShadow: isHovered ? '0 25px 50px -12px rgba(0, 0, 0, 0.6)' : '0 10px 30px -10px rgba(0, 0, 0, 0.4)',
         }}
       >
-        <img
-          src={posterUrl}
-          alt={movie.title}
-          className="h-full w-full object-cover transition-all duration-500"
-          style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
-          onError={() => setImageError(true)}
-        />
+        <PosterImage src={posterUrl} title={movie.title} className="h-full w-full object-cover transition-all duration-500" />
 
         <div
           className={`absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
@@ -249,12 +351,14 @@ export function MovieCard({ movie, variant = 'default', onClick, onSave, showRan
         <h3 className="truncate font-semibold text-foreground transition-colors group-hover:text-[#f4b684]">
           {movie.title}
         </h3>
-        <div className="mt-1 flex items-center justify-between">
+        <div className="mt-1 flex items-center justify-between gap-3">
           <span className="text-sm text-muted-foreground">{movie.year}</span>
-          <span className="text-sm font-bold text-[#f4b684]">{movie.score.toFixed(1)}</span>
+          <span className="inline-flex items-center gap-1 text-sm font-bold text-[#f4b684]">
+            <Star className="h-3.5 w-3.5" />
+            {movie.score.toFixed(1)}
+          </span>
         </div>
       </div>
     </div>
   );
 }
-

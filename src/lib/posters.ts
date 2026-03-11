@@ -19,12 +19,12 @@ export function getPosterFallback(title: string, size: PosterSize = {}): string 
   const words = title.split(" ");
   const midpoint = Math.ceil(words.length / 2);
   const lines = [words.slice(0, midpoint).join(" "), words.slice(midpoint).join(" ")].filter(Boolean);
-  const textY = lines.length === 1 ? 248 : 228;
-  const lineGap = 34;
+  const textY = lines.length === 1 ? 286 : 272;
+  const lineGap = 30;
   const titleMarkup = lines
     .map(
       (line, index) =>
-        `<text x="50%" y="${textY + index * lineGap}" text-anchor="middle" fill="${FALLBACK_FG}" font-family="Oswald, Arial, sans-serif" font-size="28" letter-spacing="1">${escapeXml(
+        `<text x="50%" y="${textY + index * lineGap}" text-anchor="middle" fill="${FALLBACK_FG}" font-family="Oswald, Arial, sans-serif" font-size="24" letter-spacing="1">${escapeXml(
           line,
         )}</text>`,
     )
@@ -49,11 +49,18 @@ export function getPosterFallback(title: string, size: PosterSize = {}): string 
       <circle cx="72" cy="372" r="84" fill="#f4b684" opacity="0.08"/>
       <rect x="36" y="54" width="86" height="4" rx="2" fill="url(#accent)"/>
       <text x="36" y="82" fill="#c3b1a3" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="3">STARS</text>
-      <text x="36" y="102" fill="#8f8177" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="2">TITLE POSTER</text>
-      <line x1="36" y1="174" x2="264" y2="174" stroke="rgba(244,182,132,0.22)"/>
+      <text x="36" y="102" fill="#8f8177" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="2">POSTER COMING SOON</text>
+      <g opacity="0.9">
+        <rect x="93" y="136" width="114" height="86" rx="18" fill="rgba(255,255,255,0.04)" stroke="rgba(244,182,132,0.2)"/>
+        <rect x="112" y="154" width="76" height="50" rx="10" fill="rgba(244,182,132,0.08)" stroke="rgba(244,182,132,0.25)"/>
+        <circle cx="132" cy="171" r="6" fill="#f4b684"/>
+        <path d="M120 196l18-16 14 12 13-10 15 14" fill="none" stroke="#f7efe7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M100 146h100" stroke="rgba(244,182,132,0.16)" stroke-width="2"/>
+      </g>
+      <line x1="36" y1="246" x2="264" y2="246" stroke="rgba(244,182,132,0.22)"/>
       ${titleMarkup}
-      <line x1="36" y1="302" x2="180" y2="302" stroke="rgba(244,182,132,0.22)"/>
-      <text x="36" y="332" fill="#c3b1a3" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="2">MATCHED TO TITLE</text>
+      <line x1="36" y1="336" x2="204" y2="336" stroke="rgba(244,182,132,0.22)"/>
+      <text x="36" y="366" fill="#c3b1a3" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="2">ARTWORK PENDING</text>
     </svg>
   `;
 

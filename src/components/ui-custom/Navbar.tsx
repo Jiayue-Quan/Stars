@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowUpRight, Bell, Menu, Search, Star, X } from 'lucide-react';
@@ -10,6 +10,8 @@ export function Navbar() {
   const [searchParams] = useSearchParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchValue, setSearchValue] = useState(searchParams.get('q') ?? '');
+  const browseSearchValue = searchParams.get('q') ?? '';
+  const inputValue = location.pathname === '/browse' ? browseSearchValue : searchValue;
 
   const navLinks = [
     { path: '/', label: 'Home' },
@@ -24,22 +26,27 @@ export function Navbar() {
     return location.pathname.startsWith(path);
   };
 
-  useEffect(() => {
+  const handleSearchChange = (value: string) => {
     if (location.pathname === '/browse') {
-      setSearchValue(searchParams.get('q') ?? '');
+      navigate(value.trim() ? `/browse?q=${encodeURIComponent(value)}` : '/browse', { replace: true });
+      return;
     }
-  }, [location.pathname, searchParams]);
+
+    setSearchValue(value);
+  };
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const query = searchValue.trim();
+    const query = inputValue.trim();
 
     navigate(query ? `/browse?q=${encodeURIComponent(query)}` : '/browse');
     setMobileMenuOpen(false);
   };
 
   const clearSearch = () => {
-    setSearchValue('');
+    if (location.pathname !== '/browse') {
+      setSearchValue('');
+    }
 
     if (location.pathname === '/browse' && searchParams.get('q')) {
       navigate('/browse');
@@ -100,12 +107,12 @@ export function Navbar() {
               <Search className="search-input-icon" />
               <Input
                 type="search"
-                value={searchValue}
-                onChange={(event) => setSearchValue(event.target.value)}
+                value={inputValue}
+                onChange={(event) => handleSearchChange(event.target.value)}
                 placeholder="Search movies"
                 className="search-input-field search-input-field-with-action h-10 w-56 rounded-full border-white/10 bg-black/20 text-sm text-white placeholder:text-muted-foreground hover:border-white/20 focus-visible:ring-white/20"
               />
-              {searchValue && (
+              {inputValue && (
                 <button
                   type="button"
                   onClick={clearSearch}
@@ -168,12 +175,12 @@ export function Navbar() {
                 <Search className="search-input-icon" />
                 <Input
                   type="search"
-                  value={searchValue}
-                  onChange={(event) => setSearchValue(event.target.value)}
+                  value={inputValue}
+                  onChange={(event) => handleSearchChange(event.target.value)}
                   placeholder="Search movies"
                   className="search-input-field search-input-field-with-clear-and-action h-11 rounded-xl border-white/10 bg-black/20 text-white"
                 />
-                {searchValue && (
+                {inputValue && (
                   <button
                     type="button"
                     onClick={clearSearch}

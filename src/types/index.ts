@@ -6,9 +6,12 @@ export interface Movie {
   tmdbId?: number;
   title: string;
   year: number;
+  releaseDate?: string;
   genres: string[];
   verdict: Verdict;
   score: number;
+  reviewCount?: number;
+  popularity?: number;
   poster: string;
   backdrop?: string;
   director: string;
@@ -68,8 +71,8 @@ export interface Actor {
   movieIds: string[];
 }
 
-export type ViewMode = 'grid' | 'compact';
+export type ViewMode = 'grid' | 'compact' | 'list';
 
-export type SortOption = 'newest' | 'topRated' | 'popular' | 'oldest';
+export type SortOption = 'newest' | 'highestRated' | 'mostPopular' | 'releaseDate' | 'mostReviewed';
 
 export type WatchlistTab = 'watchlist' | 'watched' | 'favorites';
