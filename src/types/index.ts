@@ -2,6 +2,8 @@ export type Verdict = 'Masterpiece' | 'Essential' | 'Recommended' | 'Mixed' | 'S
 
 export interface Movie {
   id: string;
+  source?: 'local' | 'tmdb';
+  tmdbId?: number;
   title: string;
   year: number;
   genres: string[];
@@ -17,6 +19,7 @@ export interface Movie {
   language: string;
   streaming?: string[];
   decade: number;
+  trailerUrl?: string;
 }
 
 export interface Review {
