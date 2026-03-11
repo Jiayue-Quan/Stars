@@ -1,0 +1,26 @@
+export const browseGenres = [
+  'Action',
+  'Adventure',
+  'Animation',
+  'Biography',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Family',
+  'Fantasy',
+  'Film-Noir',
+  'History',
+  'Horror',
+  'Musical',
+  'Mystery',
+  'Romance',
+  'Sci-Fi',
+  'Sport',
+  'Spy',
+  'Thriller',
+  'War',
+  'Western',
+];
+
+export const browseDecades = [1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];

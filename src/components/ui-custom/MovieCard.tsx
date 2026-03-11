@@ -171,6 +171,10 @@ export function MovieCard({ movie, variant = 'default', onClick, onSave, showRan
               className={`mt-4 flex gap-2 transition-all duration-300 ${isHovered ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
             >
               <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClick?.();
+                }}
                 className="flex flex-1 items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold transition-all hover:scale-105"
                 style={{
                   background: 'linear-gradient(135deg, #d26d47 0%, #9f472a 100%)',
@@ -178,7 +182,7 @@ export function MovieCard({ movie, variant = 'default', onClick, onSave, showRan
                 }}
               >
                 <Play className="h-4 w-4" />
-                Trailer
+                Open
               </button>
               <button
                 onClick={(e) => {

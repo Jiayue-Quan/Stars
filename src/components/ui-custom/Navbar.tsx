@@ -38,7 +38,6 @@ export function Navbar() {
             </div>
             <div className="leading-none">
               <span className="heading-display heading-gradient block text-2xl">STARS</span>
-              <span className="section-kicker !text-[0.58rem] !tracking-[0.28em] text-white/45">Film Notes</span>
             </div>
           </Link>
 
@@ -65,10 +64,13 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="hidden h-10 items-center gap-2 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-muted-foreground transition-all hover:border-white/20 hover:text-white lg:flex">
+            <Link
+              to="/browse"
+              className="hidden h-10 items-center gap-2 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-muted-foreground transition-all hover:border-white/20 hover:text-white lg:flex"
+            >
               <Search className="h-4 w-4" />
               Search reviews
-            </button>
+            </Link>
             <button className="relative flex h-10 w-10 items-center justify-center rounded-full border border-transparent text-muted-foreground transition-all hover:border-white/10 hover:bg-white/5 hover:text-white">
               <Bell className="h-4 w-4" />
               <span

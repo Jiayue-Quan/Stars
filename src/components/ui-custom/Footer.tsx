@@ -1,4 +1,4 @@
-﻿import { Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArrowUpRight, Instagram, Star, Twitter, Youtube } from 'lucide-react';
 
 export function Footer() {
@@ -29,15 +29,15 @@ export function Footer() {
               not a utility dashboard.
             </p>
             <div className="mt-6 flex items-center gap-3">
-              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <Link to="/lists" className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110" style={{ background: 'rgba(255,255,255,0.05)' }}>
                 <Twitter className="h-4 w-4" />
-              </a>
-              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              </Link>
+              <Link to="/explore" className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110" style={{ background: 'rgba(255,255,255,0.05)' }}>
                 <Instagram className="h-4 w-4" />
-              </a>
-              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              </Link>
+              <Link to="/signup" className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-110" style={{ background: 'rgba(255,255,255,0.05)' }}>
                 <Youtube className="h-4 w-4" />
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -83,13 +83,10 @@ export function Footer() {
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <p className="text-sm text-muted-foreground">Copyright 2026 STARS. All rights reserved.</p>
-            <p className="text-sm text-muted-foreground">
-              Built to feel more like a journal and less like a dashboard.
-            </p>
+            <p className="text-sm text-muted-foreground">Built to feel more like a journal and less like a dashboard.</p>
           </div>
         </div>
       </div>
     </footer>
   );
 }
-

@@ -28,7 +28,8 @@ export function PosterImage({
       src={currentSrc}
       alt={title}
       className={className}
-      loading={loading}
+      loading={loading ?? 'lazy'}
+      decoding="async"
       onError={() => setFailedSrc(resolvedSrc)}
     />
   );

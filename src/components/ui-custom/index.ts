@@ -6,3 +6,4 @@ export { ScoreRing } from './ScoreRing';
 export { FilterChips } from './FilterChips';
 export { Footer } from './Footer';
 export { CinematicGlobe } from './CinematicGlobe';
+export { AppErrorBoundary } from './AppErrorBoundary';

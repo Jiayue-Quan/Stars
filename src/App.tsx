@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { Navbar, Footer } from '@/components/ui-custom';
+import { BrowserRouter, HashRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { AppErrorBoundary, Footer, Navbar } from '@/components/ui-custom';
+import { appEnv } from '@/lib/env';
 import './App.css';
 
 const Home = lazy(() => import('@/pages/Home').then((module) => ({ default: module.Home })));
@@ -31,6 +32,20 @@ function RouteFallback() {
   );
 }
 
+function NotFound() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center px-4 py-16">
+      <div className="section-panel w-full max-w-md px-6 py-10 text-center">
+        <p className="section-kicker">404</p>
+        <h2 className="heading-display mt-3 text-3xl text-white">Page not found</h2>
+        <p className="mt-3 text-sm text-muted-foreground">
+          This route does not exist in the current build.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Layout component that conditionally shows navbar/footer
 function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -54,22 +69,27 @@ function Layout({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const Router = appEnv.routerMode === 'browser' ? BrowserRouter : HashRouter;
+
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/browse" element={<Browse />} />
-          <Route path="/review/:id" element={<Review />} />
-          <Route path="/watchlist" element={<Watchlist />} />
-          <Route path="/lists" element={<Lists />} />
-          <Route path="/control-room" element={<ControlRoom />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <AppErrorBoundary>
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/explore" element={<Explore />} />
+            <Route path="/browse" element={<Browse />} />
+            <Route path="/review/:id" element={<Review />} />
+            <Route path="/watchlist" element={<Watchlist />} />
+            <Route path="/lists" element={<Lists />} />
+            <Route path="/control-room" element={<ControlRoom />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </AppErrorBoundary>
   );
 }
 

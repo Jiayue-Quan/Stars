@@ -1,32 +1,79 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Bookmark, Play, Share2, AlertTriangle, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { AlertTriangle, Bookmark, Play, Share2, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { PosterImage, VerdictBadge, ScoreRing } from '@/components/ui-custom';
-import { resolvePosterUrl } from '@/lib/posters';
-import { getMovieById, getReviewByMovieId, movies } from '@/data/movies';
+import { PosterImage, ScoreRing, VerdictBadge } from '@/components/ui-custom';
+import { buildYouTubeSearchUrl, openExternalUrl, shareUrl } from '@/lib/browser';
+import { fetchTmdbMovieByRouteId } from '@/lib/tmdb-movies';
+import { getUserLibrary, toggleLibraryItem } from '@/lib/user-library';
+import type { Movie, Review as ReviewType } from '@/types';
 
 export function Review() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [showSpoilers, setShowSpoilers] = useState(false);
+  const [watchlistIds, setWatchlistIds] = useState(() => getUserLibrary().watchlist);
+  const [movie, setMovie] = useState<Movie | null>(null);
+  const [review, setReview] = useState<ReviewType | null>(null);
+  const [similarMovies, setSimilarMovies] = useState<Movie[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
+  useEffect(() => {
+    let cancelled = false;
 
-  const movie = id ? getMovieById(id) : undefined;
-  const review = id ? getReviewByMovieId(id) : undefined;
-  
-  // Get similar movies (same genre)
-  const similarMovies = movie 
-    ? movies.filter(m => m.id !== movie.id && m.genres.some(g => movie.genres.includes(g))).slice(0, 3)
-    : [];
+    async function loadMovie() {
+      if (!id) return;
+
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const response = await fetchTmdbMovieByRouteId(id);
+        if (!cancelled && response) {
+          setMovie(response.movie);
+          setReview(response.review);
+          setSimilarMovies(response.similarMovies);
+        }
+        if (!cancelled && !response) {
+          setLoadError('This page only supports TMDB-backed movies.');
+        }
+      } catch (error) {
+        console.error('Failed to load TMDB movie', error);
+        if (!cancelled) {
+          setLoadError('Failed to load live movie data from TMDB.');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void loadMovie();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (isLoading && !movie) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background pt-16">
+        <div className="section-panel w-full max-w-md px-6 py-10 text-center">
+          <p className="section-kicker">Loading</p>
+          <h1 className="heading-display mt-3 text-4xl text-white">Opening review</h1>
+        </div>
+      </div>
+    );
+  }
 
   if (!movie) {
     return (
-      <div className="min-h-screen bg-background pt-16 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Movie not found</h1>
-          <Button onClick={() => navigate('/browse')} className="mt-4">
+      <div className="flex min-h-screen items-center justify-center bg-background pt-16">
+        <div className="section-panel w-full max-w-lg px-6 py-10 text-center">
+          <p className="section-kicker">Unavailable</p>
+          <h1 className="heading-display mt-3 text-4xl text-white">Movie not available</h1>
+          <p className="mt-4 text-sm text-muted-foreground">{loadError || 'This title could not be loaded from TMDB.'}</p>
+          <Button onClick={() => navigate('/browse')} className="btn-primary mt-6">
             Browse Movies
           </Button>
         </div>
@@ -39,124 +86,119 @@ export function Review() {
     performances: movie.score * 0.98,
     direction: movie.score * 0.97,
     visuals: movie.score * 0.96,
-    sound: movie.score * 0.94
+    sound: movie.score * 0.94,
   };
+  const isSaved = watchlistIds.includes(movie.id);
+
+  const handleToggleSave = () => {
+    const nextState = toggleLibraryItem('watchlist', movie.id);
+    setWatchlistIds(nextState.watchlist);
+  };
+
+  const handleShare = async () => {
+    const reviewUrl = typeof window === 'undefined' ? '' : window.location.href;
+    await shareUrl(reviewUrl, `${movie.title} review`, `Read the STARS review for ${movie.title}`);
+  };
+
+  const trailerUrl = movie.trailerUrl || buildYouTubeSearchUrl(`${movie.title} ${movie.year} trailer`);
 
   return (
     <div className="min-h-screen bg-background pt-16">
-      {/* Hero Header */}
       <header className="relative">
-        {/* Background */}
         <div className="absolute inset-0 h-96">
-          <div 
+          <div
             className="absolute inset-0 bg-cover bg-center"
-            style={{ 
-              backgroundImage: `url(${resolvePosterUrl(movie.poster, movie.title, { width: 600, height: 900 })})`,
-              filter: 'blur(40px) brightness(0.25)'
+            style={{
+              backgroundImage: `url(${movie.backdrop || movie.poster})`,
+              filter: 'blur(40px) brightness(0.25)',
             }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
-          <div className="flex flex-col lg:flex-row gap-8">
-            {/* Poster */}
-            <div className="lg:w-1/4 flex-shrink-0">
-              <div className="aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl">
-                <PosterImage 
-                  src={movie.poster} 
-                  title={movie.title}
-                  className="w-full h-full object-cover"
-                />
+        <div className="relative z-10 mx-auto max-w-7xl px-4 pb-8 pt-12 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-8 lg:flex-row">
+            <div className="flex-shrink-0 lg:w-1/4">
+              <div className="aspect-[2/3] overflow-hidden rounded-2xl shadow-2xl">
+                <PosterImage src={movie.poster} title={movie.title} className="h-full w-full object-cover" />
               </div>
             </div>
 
-            {/* Info */}
-            <div className="lg:w-3/4 flex flex-col">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h1 className="heading-display text-4xl md:text-5xl lg:text-6xl">{movie.title}</h1>
-                  <p className="text-lg text-muted-foreground mt-2">
-                    {movie.year} • {movie.genres.join(' / ')} • {movie.runtime} min
-                  </p>
-                  <p className="text-muted-foreground">Directed by {movie.director}</p>
-                </div>
+            <div className="flex flex-col lg:w-3/4">
+              <div>
+                <h1 className="heading-display text-4xl md:text-5xl lg:text-6xl">{movie.title}</h1>
+                <p className="mt-2 text-lg text-muted-foreground">
+                  {movie.year} • {movie.genres.join(' / ')} • {movie.runtime ? `${movie.runtime} min` : 'Runtime pending'}
+                </p>
+                <p className="text-muted-foreground">Directed by {movie.director}</p>
               </div>
 
               <div className="mt-6">
                 <VerdictBadge verdict={movie.verdict} score={movie.score} size="lg" />
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap gap-3 mt-8">
-                <Button className="btn-outline">
-                  <Bookmark className="w-4 h-4 mr-2" />
-                  Save
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Button className="btn-outline" onClick={handleToggleSave}>
+                  <Bookmark className="mr-2 h-4 w-4" />
+                  {isSaved ? 'Saved' : 'Save'}
                 </Button>
-                <Button className="btn-outline">
-                  <Play className="w-4 h-4 mr-2" />
+                <Button className="btn-outline" onClick={() => openExternalUrl(trailerUrl)}>
+                  <Play className="mr-2 h-4 w-4" />
                   Watch Trailer
                 </Button>
-                <Button className="btn-outline">
-                  <Share2 className="w-4 h-4 mr-2" />
+                <Button className="btn-outline" onClick={() => void handleShare()}>
+                  <Share2 className="mr-2 h-4 w-4" />
                   Share
                 </Button>
               </div>
 
-              {/* Cast */}
               <div className="mt-8">
-                <p className="text-mono text-xs uppercase tracking-wider text-muted-foreground mb-2">Starring</p>
-                <p className="text-foreground">{movie.cast.join(', ')}</p>
+                <p className="mb-2 text-mono text-xs uppercase tracking-wider text-muted-foreground">Starring</p>
+                <p className="text-foreground">{movie.cast.length ? movie.cast.join(', ') : 'Cast details unavailable.'}</p>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex flex-col lg:flex-row gap-12">
-          {/* Left Column - Review Content */}
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-12 lg:flex-row">
           <div className="lg:w-2/3">
-            {/* Quick Summary */}
             {review && (
               <section className="mb-10">
-                <h2 className="text-mono text-xs uppercase tracking-wider text-muted-foreground mb-4">
-                  In 10 Seconds
-                </h2>
-                <div className="p-6 rounded-2xl bg-card/40 border border-white/[0.06]">
+                <h2 className="mb-4 text-mono text-xs uppercase tracking-wider text-muted-foreground">In 10 Seconds</h2>
+                <div className="rounded-2xl border border-white/[0.06] bg-card/40 p-6">
                   <p className="text-lg leading-relaxed">{review.summary}</p>
                 </div>
               </section>
             )}
 
-            {/* Pros & Cons */}
             {review && (
               <section className="mb-10">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="p-5 rounded-2xl bg-emerald-500/5 border border-emerald-500/20">
-                    <div className="flex items-center gap-2 mb-3">
-                      <ThumbsUp className="w-5 h-5 text-emerald-500" />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+                    <div className="mb-3 flex items-center gap-2">
+                      <ThumbsUp className="h-5 w-5 text-emerald-500" />
                       <h3 className="font-semibold text-emerald-500">Pros</h3>
                     </div>
                     <ul className="space-y-2">
-                      {review.pros.map((pro, i) => (
-                        <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                          <span className="text-emerald-500 mt-1">+</span>
+                      {review.pros.map((pro, index) => (
+                        <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <span className="mt-1 text-emerald-500">+</span>
                           {pro}
                         </li>
                       ))}
                     </ul>
                   </div>
-                  <div className="p-5 rounded-2xl bg-red-500/5 border border-red-500/20">
-                    <div className="flex items-center gap-2 mb-3">
-                      <ThumbsDown className="w-5 h-5 text-red-500" />
+                  <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+                    <div className="mb-3 flex items-center gap-2">
+                      <ThumbsDown className="h-5 w-5 text-red-500" />
                       <h3 className="font-semibold text-red-500">Cons</h3>
                     </div>
                     <ul className="space-y-2">
-                      {review.cons.map((con, i) => (
-                        <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                          <span className="text-red-500 mt-1">-</span>
+                      {review.cons.map((con, index) => (
+                        <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <span className="mt-1 text-red-500">-</span>
                           {con}
                         </li>
                       ))}
@@ -166,14 +208,13 @@ export function Review() {
               </section>
             )}
 
-            {/* Spoiler Toggle */}
             <section className="mb-10">
-              <div className="flex items-center justify-between p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+              <div className="flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
                 <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
                   <div>
                     <p className="font-medium">Spoiler Section</p>
-                    <p className="text-sm text-muted-foreground">Contains plot details</p>
+                    <p className="text-sm text-muted-foreground">Contains generated plot notes</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -183,74 +224,42 @@ export function Review() {
               </div>
 
               {showSpoilers && (
-                <div className="mt-4 p-6 rounded-2xl bg-card/40 border border-white/[0.06]">
-                  <p className="text-muted-foreground">
-                    Spoiler content would appear here. This section contains detailed plot analysis, 
-                    ending discussion, and key story revelations that viewers may want to experience fresh.
-                  </p>
+                <div className="mt-4 rounded-2xl border border-white/[0.06] bg-card/40 p-6">
+                  <p className="text-muted-foreground">{review?.sections.story ?? movie.synopsis}</p>
                 </div>
               )}
             </section>
 
-            {/* Detailed Sections */}
             {review && (
               <section className="space-y-8">
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Story</h2>
-                  <p className="text-muted-foreground leading-relaxed">{review.sections.story}</p>
-                </div>
-                
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Performances</h2>
-                  <p className="text-muted-foreground leading-relaxed">{review.sections.performances}</p>
-                </div>
-                
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Direction</h2>
-                  <p className="text-muted-foreground leading-relaxed">{review.sections.direction}</p>
-                </div>
-                
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Visuals</h2>
-                  <p className="text-muted-foreground leading-relaxed">{review.sections.visuals}</p>
-                </div>
-                
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Sound</h2>
-                  <p className="text-muted-foreground leading-relaxed">{review.sections.sound}</p>
-                </div>
-                
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Themes</h2>
-                  <p className="text-muted-foreground leading-relaxed">{review.sections.themes}</p>
-                </div>
+                <div><h2 className="mb-4 text-xl font-semibold">Story</h2><p className="leading-relaxed text-muted-foreground">{review.sections.story}</p></div>
+                <div><h2 className="mb-4 text-xl font-semibold">Performances</h2><p className="leading-relaxed text-muted-foreground">{review.sections.performances}</p></div>
+                <div><h2 className="mb-4 text-xl font-semibold">Direction</h2><p className="leading-relaxed text-muted-foreground">{review.sections.direction}</p></div>
+                <div><h2 className="mb-4 text-xl font-semibold">Visuals</h2><p className="leading-relaxed text-muted-foreground">{review.sections.visuals}</p></div>
+                <div><h2 className="mb-4 text-xl font-semibold">Sound</h2><p className="leading-relaxed text-muted-foreground">{review.sections.sound}</p></div>
+                <div><h2 className="mb-4 text-xl font-semibold">Themes</h2><p className="leading-relaxed text-muted-foreground">{review.sections.themes}</p></div>
               </section>
             )}
           </div>
 
-          {/* Right Column - Sticky Rail */}
           <aside className="lg:w-1/3">
             <div className="sticky top-24 space-y-6">
-              {/* Score Breakdown */}
-              <div className="p-6 rounded-2xl bg-card/40 border border-white/[0.06]">
-                <h3 className="font-semibold mb-6">Score Breakdown</h3>
+              <div className="rounded-2xl border border-white/[0.06] bg-card/40 p-6">
+                <h3 className="mb-6 font-semibold">Score Breakdown</h3>
                 <div className="space-y-4">
                   {Object.entries(scoreBreakdown).map(([category, score]) => (
                     <div key={category}>
-                      <div className="flex justify-between text-sm mb-1">
+                      <div className="mb-1 flex justify-between text-sm">
                         <span className="capitalize text-muted-foreground">{category}</span>
                         <span className="font-medium">{score.toFixed(1)}</span>
                       </div>
-                      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary rounded-full transition-all duration-500"
-                          style={{ width: `${(score / 10) * 100}%` }}
-                        />
+                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                        <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${(score / 10) * 100}%` }} />
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-6 pt-6 border-t border-white/[0.06]">
+                <div className="mt-6 border-t border-white/[0.06] pt-6">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">Overall</span>
                     <ScoreRing score={movie.score} size="md" />
@@ -258,47 +267,19 @@ export function Review() {
                 </div>
               </div>
 
-              {/* Where to Watch */}
-              <div className="p-6 rounded-2xl bg-card/40 border border-white/[0.06]">
-                <h3 className="font-semibold mb-4">Where to Watch</h3>
-                <div className="flex flex-wrap gap-2">
-                  {movie.streaming?.map((service) => (
-                    <span 
-                      key={service}
-                      className="px-3 py-1.5 rounded-full bg-white/5 text-sm border border-white/10"
-                    >
-                      {service}
-                    </span>
-                  )) || (
-                    <span className="text-muted-foreground text-sm">Theaters</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Similar Movies */}
               {similarMovies.length > 0 && (
-                <div className="p-6 rounded-2xl bg-card/40 border border-white/[0.06]">
-                  <h3 className="font-semibold mb-4">Similar Movies</h3>
+                <div className="rounded-2xl border border-white/[0.06] bg-card/40 p-6">
+                  <h3 className="mb-4 font-semibold">Similar Movies</h3>
                   <div className="space-y-3">
                     {similarMovies.map((similar) => (
-                      <div 
-                        key={similar.id}
-                        onClick={() => navigate(`/review/${similar.id}`)}
-                        className="flex gap-3 cursor-pointer group"
-                      >
-                        <div className="w-14 h-20 rounded-lg overflow-hidden flex-shrink-0">
-                          <PosterImage 
-                            src={similar.poster} 
-                            title={similar.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
+                      <div key={similar.id} onClick={() => navigate(`/review/${similar.id}`)} className="group flex cursor-pointer gap-3">
+                        <div className="h-20 w-14 flex-shrink-0 overflow-hidden rounded-lg">
+                          <PosterImage src={similar.poster} title={similar.title} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
                         </div>
                         <div>
-                          <h4 className="font-medium text-sm group-hover:text-primary transition-colors">
-                            {similar.title}
-                          </h4>
+                          <h4 className="text-sm font-medium transition-colors group-hover:text-primary">{similar.title}</h4>
                           <p className="text-xs text-muted-foreground">{similar.year}</p>
-                          <p className="text-xs text-primary mt-1">{similar.score.toFixed(1)}</p>
+                          <p className="mt-1 text-xs text-primary">{similar.score.toFixed(1)}</p>
                         </div>
                       </div>
                     ))}
