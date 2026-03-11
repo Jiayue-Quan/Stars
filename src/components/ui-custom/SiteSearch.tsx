@@ -1,51 +1,56 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Film, LoaderCircle, Search, Tv, UserRound, X } from 'lucide-react';
+import { LoaderCircle, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { SearchTypeIcon } from '@/components/ui-custom/GlobalSearchResults';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
-import { getSearchResultHref, getSearchResultTypeLabel, searchTitlesAndPeople } from '@/lib/tmdb-search';
+import { useGlobalSearch } from '@/hooks/use-global-search';
+import { getSearchResultHref, getSearchResultTypeLabel } from '@/lib/tmdb-search';
+import { getTypeBadgeClassName } from '@/lib/search-ui';
 import { cn } from '@/lib/utils';
 import type { SearchResult } from '@/types';
 
 type SiteSearchProps = {
-  variant?: 'desktop' | 'mobile';
+  variant?: 'desktop' | 'mobile' | 'inline';
   onAfterNavigate?: () => void;
+  value?: string;
+  onValueChange?: (value: string) => void;
+  onDropdownVisibilityChange?: (isVisible: boolean) => void;
 };
 
 const searchDebounceMs = 250;
-
-function getTypeIcon(mediaType: SearchResult['mediaType']) {
-  if (mediaType === 'movie') return Film;
-  if (mediaType === 'tv') return Tv;
-  return UserRound;
-}
-
-function getTypeBadgeClassName(mediaType: SearchResult['mediaType']) {
-  if (mediaType === 'movie') return 'border-[#d26d47]/30 bg-[#d26d47]/12 text-[#f4b684]';
-  if (mediaType === 'tv') return 'border-sky-400/25 bg-sky-400/10 text-sky-100';
-  return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
-}
 
 function buildFullSearchHref(query: string) {
   return `/search?q=${encodeURIComponent(query.trim())}`;
 }
 
-function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchProps) {
+function SiteSearchInner({
+  variant = 'desktop',
+  onAfterNavigate,
+  value,
+  onValueChange,
+  onDropdownVisibilityChange,
+}: SiteSearchProps) {
   const navigate = useNavigate();
   const listboxId = useId();
   const rootRef = useRef<HTMLFormElement | null>(null);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [uncontrolledQuery, setUncontrolledQuery] = useState('');
+  const query = value ?? uncontrolledQuery;
+  const setQuery = onValueChange ?? setUncontrolledQuery;
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [errorMessage, setErrorMessage] = useState('');
   const debouncedQuery = useDebouncedValue(query, searchDebounceMs);
-  const trimmedQuery = query.trim();
-  const trimmedDebouncedQuery = debouncedQuery.trim();
+  const { trimmedQuery, results, isLoading, errorMessage, hasQuery } = useGlobalSearch(debouncedQuery, {
+    limit: 8,
+    maxPages: 1,
+  });
   const hasInteractiveResults = results.length > 0;
-  const minQueryReached = trimmedQuery.length >= 2;
+  const safeActiveIndex = activeIndex >= results.length ? -1 : activeIndex;
+  const activeResult = useMemo(
+    () => (safeActiveIndex >= 0 ? results[safeActiveIndex] ?? null : null),
+    [results, safeActiveIndex],
+  );
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -59,64 +64,41 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
     return () => window.removeEventListener('pointerdown', handlePointerDown);
   }, []);
 
+  const dropdownVisible = isOpen && (query.trim().length > 0 || isLoading || errorMessage.length > 0);
+
   useEffect(() => {
-    let cancelled = false;
+    onDropdownVisibilityChange?.(dropdownVisible);
+  }, [dropdownVisible, onDropdownVisibilityChange]);
 
-    if (trimmedDebouncedQuery.length < 2) return;
+  const { pathname } = useLocation();
 
-    void Promise.resolve().then(() => {
-      if (cancelled) return;
+  useEffect(() => {
+    setIsOpen(false);
+    setActiveIndex(-1);
+    if (value === undefined) {
+      setUncontrolledQuery('');
+    }
+  }, [pathname, value]);
 
-      setIsLoading(true);
-      setErrorMessage('');
-
-      return searchTitlesAndPeople(trimmedDebouncedQuery)
-        .then((nextResults) => {
-          if (cancelled) return;
-          setResults(nextResults);
-          setActiveIndex(-1);
-        })
-        .catch((error) => {
-          console.error('Failed to search TMDB', error);
-          if (cancelled) return;
-          setResults([]);
-          setActiveIndex(-1);
-          setErrorMessage('Search is temporarily unavailable.');
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setIsLoading(false);
-          }
-        });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [trimmedDebouncedQuery]);
-
-  const activeResult = useMemo(
-    () => (activeIndex >= 0 ? results[activeIndex] ?? null : null),
-    [activeIndex, results],
-  );
-
-  const dropdownVisible = isOpen && (trimmedQuery.length > 0 || isLoading || errorMessage.length > 0);
   const inputClassName =
     variant === 'desktop'
       ? 'search-input-field search-input-field-with-action h-10 w-56 rounded-full border-white/10 bg-black/20 text-sm text-white placeholder:text-muted-foreground hover:border-white/20 focus-visible:ring-white/20'
-      : 'search-input-field search-input-field-with-clear-and-action h-11 rounded-xl border-white/10 bg-black/20 text-white';
-  const formClassName = variant === 'desktop' ? 'search-input-shell hidden lg:block' : 'search-input-shell';
+      : variant === 'inline'
+        ? 'input-cinematic search-input-field search-input-field-with-clear-and-action h-12 rounded-2xl border-white/10 bg-white/[0.03] text-white'
+        : 'search-input-field search-input-field-with-clear-and-action h-11 rounded-xl border-white/10 bg-black/20 text-white';
+  const formClassName =
+    variant === 'desktop' ? 'search-input-shell hidden lg:block' : 'search-input-shell w-full';
   const dropdownClassName =
     variant === 'desktop'
       ? 'absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[28rem] overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#120e0c]/96 shadow-[0_28px_80px_-34px_rgba(0,0,0,0.95)] backdrop-blur-2xl'
-      : 'absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#120e0c]/96 shadow-[0_28px_80px_-34px_rgba(0,0,0,0.95)] backdrop-blur-2xl';
+      : variant === 'inline'
+        ? 'absolute left-0 right-0 top-[calc(100%+0.85rem)] z-[70] overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#140f0d] shadow-[0_32px_80px_-36px_rgba(0,0,0,0.98)]'
+        : 'absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#120e0c]/96 shadow-[0_28px_80px_-34px_rgba(0,0,0,0.95)] backdrop-blur-2xl';
 
   const clearSearch = () => {
     setQuery('');
-    setResults([]);
     setIsOpen(false);
     setActiveIndex(-1);
-    setErrorMessage('');
   };
 
   const openResult = (result: SearchResult) => {
@@ -126,8 +108,8 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
   };
 
   const openFullSearch = () => {
-    if (!trimmedQuery) return;
-    navigate(buildFullSearchHref(trimmedQuery));
+    if (!query.trim()) return;
+    navigate(buildFullSearchHref(query));
     clearSearch();
     onAfterNavigate?.();
   };
@@ -189,26 +171,21 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
           setQuery(nextValue);
           setIsOpen(true);
           setActiveIndex(-1);
-          if (nextValue.trim().length < 2) {
-            setResults([]);
-            setIsLoading(false);
-            setErrorMessage('');
-          }
         }}
         onFocus={() => {
-          if (trimmedQuery.length > 0) {
+          if (query.trim().length > 0) {
             setIsOpen(true);
           }
         }}
         onKeyDown={handleKeyDown}
         placeholder="Search for a movie, TV show, or person..."
-        className={cn(inputClassName, !trimmedQuery && variant === 'desktop' ? 'w-72' : '')}
+        className={cn(inputClassName, !query.trim() && variant === 'desktop' ? 'w-72' : '')}
         aria-expanded={dropdownVisible}
         aria-controls={listboxId}
         aria-activedescendant={activeResult ? `${listboxId}-${activeResult.mediaType}-${activeResult.id}` : undefined}
         aria-autocomplete="list"
       />
-      {trimmedQuery && (
+      {query.trim() && (
         <button
           type="button"
           onClick={clearSearch}
@@ -248,7 +225,7 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
               </div>
             ) : errorMessage ? (
               <div className="rounded-[1.15rem] px-4 py-5 text-sm text-muted-foreground">{errorMessage}</div>
-            ) : !minQueryReached ? (
+            ) : !hasQuery ? (
               <div className="rounded-[1.15rem] px-4 py-5 text-sm text-muted-foreground">
                 Type at least 2 characters to search across movies, TV shows, and people.
               </div>
@@ -259,8 +236,7 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
             ) : (
               <>
                 {results.map((result, index) => {
-                  const TypeIcon = getTypeIcon(result.mediaType);
-                  const isActive = index === activeIndex;
+                  const isActive = index === safeActiveIndex;
 
                   return (
                     <button
@@ -292,7 +268,7 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
                             decoding="async"
                           />
                         ) : (
-                          <TypeIcon className="h-5 w-5 text-muted-foreground" />
+                          <SearchTypeIcon mediaType={result.mediaType} className="h-5 w-5 text-muted-foreground" />
                         )}
                       </div>
 
@@ -305,7 +281,7 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
                               getTypeBadgeClassName(result.mediaType),
                             )}
                           >
-                            <TypeIcon className="h-3 w-3" />
+                            <SearchTypeIcon mediaType={result.mediaType} className="h-3 w-3" />
                             {getSearchResultTypeLabel(result.mediaType)}
                           </span>
                         </div>
@@ -337,7 +313,5 @@ function SiteSearchInner({ variant = 'desktop', onAfterNavigate }: SiteSearchPro
 }
 
 export function SiteSearch(props: SiteSearchProps) {
-  const location = useLocation();
-
-  return <SiteSearchInner key={`${location.pathname}${location.search}`} {...props} />;
+  return <SiteSearchInner {...props} />;
 }

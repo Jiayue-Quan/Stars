@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowUpRight, Bell, Menu, Star, X } from 'lucide-react';
-import { SiteSearch } from './SiteSearch';
 
 export function Navbar() {
   const location = useLocation();
@@ -64,8 +63,7 @@ export function Navbar() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
-            <SiteSearch variant="desktop" />
+          <div className="flex items-center gap-2 sm:gap-3">
             <button className="relative flex h-10 w-10 items-center justify-center rounded-full border border-transparent text-muted-foreground transition-all hover:border-white/10 hover:bg-white/5 hover:text-white">
               <Bell className="h-4 w-4" />
               <span
@@ -106,9 +104,6 @@ export function Navbar() {
           style={{ background: 'rgba(12, 9, 8, 0.96)' }}
         >
           <div className="space-y-1 px-4 py-4">
-            <div className="mb-3 md:hidden">
-              <SiteSearch variant="mobile" onAfterNavigate={() => setMobileMenuOpen(false)} />
-            </div>
             {navLinks.map((link) => (
               <Link
                 key={link.path}

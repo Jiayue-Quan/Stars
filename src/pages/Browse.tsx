@@ -6,13 +6,19 @@ import {
   Grid3X3,
   List,
   MessageSquareText,
+  Search,
   SlidersHorizontal,
   Star,
   TrendingUp,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SearchResultGridCard, SearchResultRow } from '@/components/ui-custom/GlobalSearchResults';
 import { FilterChips, MovieCard, PosterImage, VerdictBadge } from '@/components/ui-custom';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useGlobalSearch } from '@/hooks/use-global-search';
 import { browseCountries, browseDecades, browseGenres, browseStreamingPlatforms } from '@/lib/movie-constants';
 import { fetchBrowseMovies, fetchTrendingMovies, serializeBrowseMovieQuery } from '@/lib/tmdb-movies';
 import { getUserLibrary, toggleLibraryItem } from '@/lib/user-library';
@@ -21,6 +27,7 @@ import type { Movie, SortOption, Verdict } from '@/types';
 
 const yearBounds = [1940, new Date().getFullYear()] as const;
 const initialCatalogPages = 1;
+const searchDebounceMs = 250;
 const initialRenderCount = {
   grid: 20,
   list: 10,
@@ -290,6 +297,10 @@ export function Browse() {
   const [directorQuery, setDirectorQuery] = useState('');
   const [castQuery, setCastQuery] = useState('');
   const [trendingMovies, setTrendingMovies] = useState<Movie[]>([]);
+  const urlSearchQuery = searchParams.get('q') ?? '';
+  const [searchInputValue, setSearchInputValue] = useState(urlSearchQuery);
+  const deferredSearchInput = useDeferredValue(searchInputValue);
+  const debouncedSearchQuery = useDebouncedValue(deferredSearchInput, searchDebounceMs);
   const [catalogState, setCatalogState] = useState<CatalogState>({
     movies: [],
     totalResults: 0,
@@ -305,24 +316,47 @@ export function Browse() {
   const [library, setLibrary] = useState(() => getUserLibrary());
   const renderMoreRef = useRef<HTMLDivElement | null>(null);
   const urlCountryFilter = searchParams.get('country') ?? '';
+  const {
+    trimmedQuery: trimmedGlobalQuery,
+    results: globalSearchResults,
+    isLoading: isGlobalSearchLoading,
+    errorMessage: globalSearchError,
+    hasQuery: hasGlobalSearchQuery,
+  } = useGlobalSearch(debouncedSearchQuery, { limit: 60, maxPages: 3 });
+
+  useEffect(() => {
+    setSearchInputValue(urlSearchQuery);
+  }, [urlSearchQuery]);
 
   useEffect(() => {
     setSelectedCountry(urlCountryFilter);
   }, [urlCountryFilter]);
 
   useEffect(() => {
+    const normalizedSearchValue = debouncedSearchQuery.trim();
+    const normalizedUrlSearchValue = urlSearchQuery.trim();
     const normalizedCountryValue = selectedCountry.trim();
     const normalizedUrlCountryValue = urlCountryFilter.trim();
-    if (normalizedCountryValue === normalizedUrlCountryValue) return;
+    if (
+      normalizedSearchValue === normalizedUrlSearchValue &&
+      normalizedCountryValue === normalizedUrlCountryValue
+    ) {
+      return;
+    }
 
     const nextParams = new URLSearchParams(searchParams);
+    if (normalizedSearchValue) {
+      nextParams.set('q', normalizedSearchValue);
+    } else {
+      nextParams.delete('q');
+    }
     if (normalizedCountryValue) {
       nextParams.set('country', normalizedCountryValue);
     } else {
       nextParams.delete('country');
     }
     setSearchParams(nextParams, { replace: true });
-  }, [searchParams, selectedCountry, setSearchParams, urlCountryFilter]);
+  }, [debouncedSearchQuery, searchParams, selectedCountry, setSearchParams, urlCountryFilter, urlSearchQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -534,7 +568,9 @@ export function Browse() {
     setDirectorQuery('');
     setCastQuery('');
     setSortBy(null);
+    setSearchInputValue('');
     const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('q');
     nextParams.delete('country');
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -752,14 +788,20 @@ export function Browse() {
 
   const showSkeletons = catalogState.isInitialLoading && catalogState.movies.length === 0;
   const hasActiveSort = Boolean(sortBy);
-  const resultSummary = showSkeletons
-    ? 'Loading movies from the full catalog...'
-    : catalogState.isRefreshing
-      ? `Updating ${visibleMovies.length.toLocaleString()} matching movies...`
-      : `Showing ${visibleMovies.length.toLocaleString()} matching movies`;
+  const resultSummary = hasGlobalSearchQuery
+    ? isGlobalSearchLoading
+      ? `Searching TMDB for "${trimmedGlobalQuery}"...`
+      : `Showing ${globalSearchResults.length.toLocaleString()} results for "${trimmedGlobalQuery}"`
+    : showSkeletons
+      ? 'Loading movies from the full catalog...'
+      : catalogState.isRefreshing
+        ? `Updating ${visibleMovies.length.toLocaleString()} matching movies...`
+        : `Showing ${visibleMovies.length.toLocaleString()} matching movies`;
   const resultCaption = showSkeletons
     ? 'Loading state'
-    : visibleMovies.length === 0
+    : hasGlobalSearchQuery
+      ? 'Search results'
+      : visibleMovies.length === 0
       ? 'Empty state'
       : activeFiltersCount > 0
         ? 'Filtered view'
@@ -767,7 +809,9 @@ export function Browse() {
           ? 'Sorted view'
           : 'Default view';
   const browseStateLabel =
-    activeFiltersCount > 0
+    hasGlobalSearchQuery
+      ? 'Search active'
+      : activeFiltersCount > 0
       ? `${activeFiltersCount} filters active`
       : hasActiveSort
         ? 'Sorted browse state'
@@ -848,10 +892,34 @@ export function Browse() {
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="flex-1 rounded-[1.4rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-muted-foreground">
-                Browse keeps its own movie-only filters. Use the global search bar above to search movies, TV shows, and
-                people.
+            <div className="relative z-20 mt-5 flex flex-col gap-3 lg:flex-row lg:items-start">
+              <div className="flex-1">
+                <div className="search-input-shell relative w-full">
+                  <Search className="search-input-icon" />
+                  <Input
+                    type="search"
+                    value={searchInputValue}
+                    onChange={(event) => {
+                      setSearchInputValue(event.target.value);
+                    }}
+                    placeholder="Search movies, TV shows, or people..."
+                    className="input-cinematic search-input-field search-input-field-with-clear-and-action h-12 rounded-2xl border-white/10 bg-white/[0.03] text-white"
+                    aria-label="Search movies, TV shows, or people"
+                    autoComplete="off"
+                  />
+                  {searchInputValue.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchInputValue('');
+                      }}
+                      className="absolute right-12 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-white"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-muted-foreground">
                 {browseStateLabel}
@@ -859,7 +927,11 @@ export function Browse() {
             </div>
             {!showSkeletons && (
               <p className="mt-3 text-xs uppercase tracking-[0.18em] text-white/40">
-                {catalogState.source === 'tmdb' ? 'TMDB connected' : 'TMDB unavailable - local fallback catalog'}
+                {hasGlobalSearchQuery
+                  ? `Global TMDB search for "${trimmedGlobalQuery}"`
+                  : catalogState.source === 'tmdb'
+                    ? 'TMDB connected'
+                    : 'TMDB unavailable - local fallback catalog'}
                 {catalogState.isRefreshing ? ' | refreshing results' : ''}
               </p>
             )}
@@ -880,7 +952,7 @@ export function Browse() {
             </div>
           )}
 
-          {isDefaultBrowseState && trendingMovies.length > 0 && (
+          {!hasGlobalSearchQuery && isDefaultBrowseState && trendingMovies.length > 0 && (
             <section
               className="mb-8 rounded-[1.8rem] border border-white/[0.08] p-5 sm:p-6"
               style={{
@@ -916,7 +988,54 @@ export function Browse() {
             </section>
           )}
 
-          {showSkeletons ? (
+          {hasGlobalSearchQuery ? (
+            isGlobalSearchLoading ? (
+              <div
+                className={`grid gap-5 ${
+                  viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1'
+                }`}
+              >
+                {Array.from({ length: viewMode === 'grid' ? 10 : 6 }).map((_, index) => (
+                  <BrowseCardSkeleton key={index} viewMode={viewMode} />
+                ))}
+              </div>
+            ) : globalSearchError ? (
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
+                {globalSearchError}
+              </div>
+            ) : globalSearchResults.length > 0 ? (
+              <div
+                className={`grid gap-5 ${
+                  viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1'
+                }`}
+              >
+                {globalSearchResults.map((result) =>
+                  viewMode === 'grid' ? (
+                    <SearchResultGridCard key={`${result.mediaType}-${result.id}`} result={result} />
+                  ) : (
+                    <SearchResultRow key={`${result.mediaType}-${result.id}`} result={result} />
+                  ),
+                )}
+              </div>
+            ) : (
+              <div className="py-20 text-center">
+                <div
+                  className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.05)' }}
+                >
+                  <Film className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="mb-2 text-xl font-semibold">No search results found</h3>
+                <p className="mb-2 text-muted-foreground">No global matches were found for "{trimmedGlobalQuery}".</p>
+                <p className="mb-6 text-sm text-white/45">
+                  Try a broader title, person name, or TV show search.
+                </p>
+                <Button onClick={() => setSearchInputValue('')} className="btn-primary">
+                  Clear search
+                </Button>
+              </div>
+            )
+          ) : showSkeletons ? (
             <div
               className={`grid gap-5 ${
                 viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1'
