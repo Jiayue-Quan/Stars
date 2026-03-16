@@ -266,6 +266,9 @@ function mapPersonCredit(credit) {
         mediaType: credit.media_type,
         title,
         subtitle: getYearLabel(date),
+        date,
+        role: credit.character?.trim() || '',
+        job: credit.job?.trim() || '',
         imageUrl: credit.poster_path
             ? getTmdbImageUrl(credit.poster_path, 'w342')
             : credit.backdrop_path
@@ -278,7 +281,7 @@ export async function fetchPersonById(id) {
         personDetailCache.set(id, tmdbFetch(`/person/${id}`, {
             query: { append_to_response: 'combined_credits' },
         }).then((details) => {
-            const credits = [...(details.combined_credits?.cast ?? []), ...(details.combined_credits?.crew ?? [])]
+            const castCredits = (details.combined_credits?.cast ?? [])
                 .sort((left, right) => {
                 const popularityDelta = (right.popularity ?? 0) - (left.popularity ?? 0);
                 if (popularityDelta !== 0)
@@ -287,6 +290,17 @@ export async function fetchPersonById(id) {
             })
                 .map(mapPersonCredit)
                 .filter((credit) => Boolean(credit));
+            const crewCredits = (details.combined_credits?.crew ?? [])
+                .sort((left, right) => {
+                const popularityDelta = (right.popularity ?? 0) - (left.popularity ?? 0);
+                if (popularityDelta !== 0)
+                    return popularityDelta;
+                return (right.vote_count ?? 0) - (left.vote_count ?? 0);
+            })
+                .map(mapPersonCredit)
+                .filter((credit) => Boolean(credit));
+            const credits = [...castCredits, ...crewCredits];
+            const dedupedCredits = Array.from(new Map(credits.map((credit) => [`${credit.mediaType}-${credit.id}`, credit])).values());
             return {
                 id: details.id,
                 name: details.name,
@@ -295,8 +309,12 @@ export async function fetchPersonById(id) {
                 birthday: details.birthday,
                 placeOfBirth: details.place_of_birth?.trim() || 'Not available',
                 imageUrl: details.profile_path ? getTmdbImageUrl(details.profile_path, 'h632') : '',
-                backdropUrl: credits[0]?.imageUrl ?? '',
-                knownFor: Array.from(new Map(credits.map((credit) => [`${credit.mediaType}-${credit.id}`, credit])).values()).slice(0, 10),
+                backdropUrl: dedupedCredits[0]?.imageUrl ?? '',
+                knownFor: dedupedCredits.slice(0, 10),
+                popularMovies: dedupedCredits.filter((credit) => credit.mediaType === 'movie').slice(0, 12),
+                castCredits,
+                crewCredits,
+                primaryRole: castCredits[0]?.role || crewCredits[0]?.job || details.known_for_department?.trim() || 'Screen credits',
             };
         }));
     }

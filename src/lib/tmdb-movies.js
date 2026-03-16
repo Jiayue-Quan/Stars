@@ -96,6 +96,16 @@ function getReleaseYear(date) {
     const year = Number((date ?? '0').slice(0, 4));
     return Number.isFinite(year) && year > 0 ? year : new Date().getFullYear();
 }
+function normalizeNumber(value, fallback = 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+function normalizeString(value, fallback = '') {
+    return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+function dedupeStrings(values) {
+    return values.filter((value, index, current) => Boolean(value) && current.indexOf(value) === index);
+}
 function getDecade(year) {
     return Math.floor(year / 10) * 10;
 }
@@ -130,17 +140,17 @@ function mapCountry(details, movie) {
     if (details?.production_countries?.[0]?.name)
         return details.production_countries[0].name;
     const code = movie?.original_language ?? 'en';
-    return countryByLanguageCode[code] ?? code.toUpperCase();
+    return countryByLanguageCode[code] ?? normalizeString(code.toUpperCase(), 'Unknown');
 }
 function mapLanguage(details, movie) {
     if (details?.spoken_languages?.[0]?.english_name)
         return details.spoken_languages[0].english_name;
     const code = movie?.original_language ?? 'en';
-    return countryByLanguageCode[code] ?? code.toUpperCase();
+    return countryByLanguageCode[code] ?? normalizeString(code.toUpperCase(), 'Unknown');
 }
 function mapSummaryMovie(movie, genreMap) {
     const year = getReleaseYear(movie.release_date);
-    const score = Number(movie.vote_average.toFixed(1));
+    const tmdbRating = Number(normalizeNumber(movie.vote_average).toFixed(1));
     const genres = movie.genre_ids
         ?.map((genreId) => genreMap.get(genreId))
         .filter((genre) => Boolean(genre)) ?? [];
@@ -148,43 +158,135 @@ function mapSummaryMovie(movie, genreMap) {
         id: toTmdbMovieId(movie.id),
         source: 'tmdb',
         tmdbId: movie.id,
-        title: movie.title,
+        title: normalizeString(movie.title, 'Untitled movie'),
         year,
-        releaseDate: movie.release_date,
+        releaseDate: normalizeString(movie.release_date),
         genres: genres.length ? genres : ['Drama'],
-        verdict: scoreToVerdict(score),
-        score,
-        reviewCount: movie.vote_count,
-        popularity: movie.popularity,
+        verdict: scoreToVerdict(tmdbRating),
+        score: tmdbRating,
+        tmdbRating,
+        reviewCount: Math.max(0, Math.round(normalizeNumber(movie.vote_count))),
+        popularity: normalizeNumber(movie.popularity),
         poster: movie.poster_path ? getTmdbImageUrl(movie.poster_path, 'w780') : '',
         backdrop: movie.backdrop_path ? getTmdbImageUrl(movie.backdrop_path, 'w1280') : '',
         director: 'Not available',
         cast: [],
         runtime: 0,
-        synopsis: movie.overview || 'No synopsis available yet.',
+        synopsis: normalizeString(movie.overview, 'No synopsis available yet.'),
         country: mapCountry(undefined, movie),
         language: mapLanguage(undefined, movie),
         streaming: [],
         decade: getDecade(year),
     };
 }
-function buildTrailerUrl(details) {
-    const trailer = details.videos?.results.find((video) => video.site === 'YouTube' && video.type === 'Trailer');
-    return trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : undefined;
+function scoreTrailerCandidate(video) {
+    const name = normalizeString(video.name).toLowerCase();
+    const type = normalizeString(video.type).toLowerCase();
+    const iso = normalizeString(video.iso_639_1).toLowerCase();
+    const site = normalizeString(video.site);
+    const isEnglish = !iso || iso === 'en';
+    const isExcluded = ['american sign language', 'asl', 'dub', 'dubbed', 'commentary', 'recap', 'clip', 'featurette'].some((token) => name.includes(token));
+    if (site !== 'YouTube' || !normalizeString(video.key)) {
+        return null;
+    }
+    let priority = -1;
+    if (type === 'trailer' && name.includes('official trailer')) {
+        priority = 400;
+    }
+    else if (type === 'trailer') {
+        priority = 300;
+    }
+    else if (type === 'teaser') {
+        priority = 200;
+    }
+    else if (!isExcluded) {
+        priority = 100;
+    }
+    if (priority < 0) {
+        return null;
+    }
+    return {
+        video,
+        score: priority
+            + (video.official ? 40 : 0)
+            + (isEnglish ? 25 : 0)
+            + (name === 'trailer' || name.endsWith(' trailer') ? 10 : 0)
+            - (isExcluded ? 500 : 0),
+    };
+}
+function pickBestTrailer(details) {
+    const candidates = (details.videos?.results ?? [])
+        .map(scoreTrailerCandidate)
+        .filter((entry) => entry !== null)
+        .sort((left, right) => right.score - left.score);
+    const best = candidates[0]?.video;
+    return best ? `https://www.youtube.com/watch?v=${best.key}` : undefined;
+}
+function mapFeaturedCast(details) {
+    return (details.credits?.cast ?? [])
+        .filter((person) => normalizeString(person.name))
+        .slice(0, 10)
+        .map((person) => ({
+        id: person.id,
+        name: normalizeString(person.name),
+        role: normalizeString(person.character),
+        profile: person.profile_path ? getTmdbImageUrl(person.profile_path, 'w300') : '',
+    }));
+}
+function mapFeaturedCrew(details) {
+    const crewPriority = ['Director', 'Writer', 'Screenplay', 'Producer', 'Director of Photography', 'Original Music Composer', 'Editor'];
+    const selectedCrew = [];
+    crewPriority.forEach((job) => {
+        const match = details.credits?.crew.find((person) => person.job === job);
+        if (match && normalizeString(match.name) && !selectedCrew.some((entry) => entry.id === match.id && entry.job === match.job)) {
+            selectedCrew.push({
+                id: match.id,
+                name: normalizeString(match.name),
+                job: normalizeString(match.job),
+                profile: match.profile_path ? getTmdbImageUrl(match.profile_path, 'w300') : '',
+            });
+        }
+    });
+    return selectedCrew;
+}
+function mapWatchProviders(providers) {
+    const usProviders = providers.results?.['US'];
+    const providerLink = normalizeString(usProviders?.link);
+    return [
+        ...(usProviders?.flatrate ?? []).map((provider) => ({ ...provider, type: 'Stream' })),
+        ...(usProviders?.rent ?? []).map((provider) => ({ ...provider, type: 'Rent' })),
+        ...(usProviders?.buy ?? []).map((provider) => ({ ...provider, type: 'Buy' })),
+    ]
+        .map((provider) => ({
+        id: provider.provider_id,
+        name: provider.provider_id !== undefined
+            ? streamingLabelByProviderId.get(provider.provider_id) ?? normalizeStreamingLabel(provider.provider_name)
+            : normalizeStreamingLabel(provider.provider_name),
+        type: provider.type,
+        logo: provider.logo_path ? getTmdbImageUrl(provider.logo_path, 'w185') : '',
+        url: providerLink,
+    }))
+        .filter((provider, index, current) => current.findIndex((entry) => entry.id === provider.id && entry.type === provider.type) === index);
 }
 function mapDetailedMovie(details, genreMap) {
     const base = mapSummaryMovie(details, genreMap);
-    const director = details.credits?.crew.find((person) => person.job === 'Director')?.name ?? 'Unknown Director';
-    const cast = details.credits?.cast.slice(0, 5).map((person) => person.name) ?? [];
+    const director = normalizeString(details.credits?.crew.find((person) => person.job === 'Director')?.name, 'Unknown Director');
+    const featuredCast = mapFeaturedCast(details);
+    const cast = dedupeStrings(featuredCast.slice(0, 5).map((person) => person.name));
+    const genres = dedupeStrings(details.genres?.map((genre) => normalizeString(genre.name)).filter(Boolean) ?? []);
     return {
         ...base,
-        genres: details.genres?.map((genre) => genre.name) ?? base.genres,
-        runtime: details.runtime ?? 0,
+        genres: genres.length ? genres : base.genres,
+        runtime: Math.max(0, Math.round(normalizeNumber(details.runtime))),
         director,
         cast,
+        castMembers: featuredCast,
+        crewMembers: mapFeaturedCrew(details),
         country: mapCountry(details, details),
         language: mapLanguage(details, details),
-        trailerUrl: buildTrailerUrl(details),
+        synopsis: normalizeString(details.overview, base.synopsis),
+        releaseDate: normalizeString(details.release_date, base.releaseDate),
+        trailerUrl: pickBestTrailer(details),
     };
 }
 async function fetchBrowseMovieDetails(tmdbId, genreMap) {
@@ -237,45 +339,6 @@ async function searchPeopleIds(query, department) {
             .map((person) => person.id)));
     }
     return personSearchCache.get(cacheKey);
-}
-function buildSyntheticReview(movie) {
-    return {
-        id: `${movie.id}-review`,
-        movieId: movie.id,
-        author: 'STARS Editorial Desk',
-        date: new Date().toISOString().slice(0, 10),
-        summary: movie.synopsis,
-        pros: [
-            `${movie.title} is coming directly from TMDB live data.`,
-            `Audience score currently sits at ${movie.score.toFixed(1)}/10.`,
-            movie.cast.length
-                ? `Main cast includes ${movie.cast.slice(0, 3).join(', ')}.`
-                : 'Cast metadata is available when TMDB provides credits.',
-        ],
-        cons: [
-            'This page uses generated editorial copy until a custom review is written.',
-            'Watch-provider data is not wired yet, so streaming badges stay minimal.',
-        ],
-        sections: {
-            story: movie.synopsis,
-            performances: movie.cast.length
-                ? `${movie.cast.join(', ')} make up the principal cast listed in TMDB.`
-                : 'Cast detail is limited for this title.',
-            direction: `${movie.director} is credited as director in TMDB metadata.`,
-            visuals: movie.backdrop
-                ? 'Backdrop and poster art are being rendered directly from TMDB image assets.'
-                : 'Poster and backdrop data are limited for this title.',
-            sound: 'Sound commentary is generated placeholder copy pending authored review content.',
-            themes: `${movie.genres.join(', ')} define the current genre and thematic profile for this title.`,
-        },
-        scoreBreakdown: {
-            story: movie.score,
-            performances: Math.max(5, Math.min(10, movie.score - 0.1)),
-            direction: Math.max(5, Math.min(10, movie.score)),
-            visuals: Math.max(5, Math.min(10, movie.score + 0.2)),
-            sound: Math.max(5, Math.min(10, movie.score - 0.2)),
-        },
-    };
 }
 async function fetchList(endpoint, limit = 12) {
     const cacheKey = `${endpoint}:${limit}`;
@@ -574,17 +637,30 @@ export async function fetchTmdbMovieByRouteId(routeId) {
     }
     const promise = (async () => {
         const genreMap = await getGenreMap();
-        const details = await tmdbFetch(`/movie/${tmdbId}`, {
-            query: { append_to_response: 'credits,videos,recommendations' },
-        });
+        const [details, providers, similarResponse] = await Promise.all([
+            tmdbFetch(`/movie/${tmdbId}`, {
+                query: { append_to_response: 'credits,videos,recommendations' },
+            }),
+            tmdbFetch(`/movie/${tmdbId}/watch/providers`).catch(() => ({ results: {} })),
+            tmdbFetch(`/movie/${tmdbId}/similar`).catch(() => ({ results: [] })),
+        ]);
         const movie = mapDetailedMovie(details, genreMap);
-        const similarMovies = (details.recommendations?.results ?? [])
+        const watchProviders = mapWatchProviders(providers);
+        const similarMovies = (similarResponse.results ?? [])
+            .slice(0, 6)
+            .map((entry) => mapSummaryMovie(entry, genreMap));
+        const recommendations = (details.recommendations?.results ?? [])
             .slice(0, 6)
             .map((entry) => mapSummaryMovie(entry, genreMap));
         return {
-            movie,
-            review: buildSyntheticReview(movie),
+            movie: {
+                ...movie,
+                streaming: watchProviders.map((provider) => provider.name),
+                watchProviders,
+            },
+            review: null,
             similarMovies,
+            recommendations,
         };
     })();
     detailCache.set(tmdbId, promise);
