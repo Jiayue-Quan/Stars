@@ -1,7 +1,9 @@
-import { browseCountryCodeByLabel, normalizeBrowseCountry, browseStreamingPlatforms } from '@/lib/movie-constants';
+import { browseStreamingPlatforms } from '@/lib/movie-constants';
 import { movies as localMovies } from '@/data/movies';
 import { getTmdbImageUrl, tmdbFetch } from '@/lib/tmdb';
 const browseSamplePageSize = 5;
+const preferredBrowseLanguageCodes = ['en', 'es', 'fr', 'hi', 'ko', 'ja', 'zh', 'de', 'it', 'ar', 'pt', 'ru'];
+const browseLanguagesCache = { promise: null };
 const countryByLanguageCode = {
     en: 'USA',
     fr: 'France',
@@ -128,9 +130,11 @@ function sortNumbers(values) {
     return values ? [...values].sort((left, right) => left - right) : undefined;
 }
 export function serializeBrowseMovieQuery(query = {}) {
+    const { languageOptions, ...rest } = query;
     return JSON.stringify({
-        ...query,
+        ...rest,
         genres: sortStrings(query.genres),
+        languages: sortStrings(query.languages),
         verdicts: sortStrings(query.verdicts),
         decades: sortNumbers(query.decades),
         streamingPlatforms: sortStrings(query.streamingPlatforms),
@@ -154,6 +158,56 @@ function normalizeNumber(value, fallback = 0) {
 }
 function normalizeString(value, fallback = '') {
     return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+function normalizeBrowseLanguageLabel(language) {
+    const englishName = normalizeString(language?.english_name);
+    const nativeName = normalizeString(language?.name);
+    const candidate = englishName || nativeName;
+    if (!candidate) {
+        return '';
+    }
+    return candidate.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function sortBrowseLanguages(languages) {
+    return [...languages].sort((left, right) => {
+        const leftPreferredIndex = preferredBrowseLanguageCodes.indexOf(left.value);
+        const rightPreferredIndex = preferredBrowseLanguageCodes.indexOf(right.value);
+        const leftPreferred = leftPreferredIndex >= 0;
+        const rightPreferred = rightPreferredIndex >= 0;
+        if (leftPreferred && rightPreferred) {
+            return leftPreferredIndex - rightPreferredIndex;
+        }
+        if (leftPreferred) {
+            return -1;
+        }
+        if (rightPreferred) {
+            return 1;
+        }
+        return left.label.localeCompare(right.label);
+    });
+}
+export async function fetchBrowseLanguages() {
+    if (!browseLanguagesCache.promise) {
+        browseLanguagesCache.promise = tmdbFetch('/configuration/languages', {
+            cacheTtlMs: 24 * 60 * 60 * 1000,
+        }).then((languages) => {
+            const usableLanguages = (Array.isArray(languages) ? languages : [])
+                .map((language) => ({
+                value: normalizeString(language?.iso_639_1).toLowerCase(),
+                label: normalizeBrowseLanguageLabel(language),
+            }))
+                .filter((language) => /^[a-z]{2}$/.test(language.value) && language.label)
+                .filter((language, index, current) => current.findIndex((entry) => entry.value === language.value) === index);
+            return sortBrowseLanguages(usableLanguages);
+        }).catch((error) => {
+            browseLanguagesCache.promise = null;
+            throw error;
+        });
+    }
+    return browseLanguagesCache.promise;
+}
+function createLanguageCodeByLabel(languages = []) {
+    return new Map(languages.map((language) => [language.label, language.value]));
 }
 function dedupeStrings(values) {
     return values.filter((value, index, current) => Boolean(value) && current.indexOf(value) === index);
@@ -284,6 +338,7 @@ function mapSummaryMovie(movie, genreMap) {
         synopsis: normalizeString(movie.overview, 'No synopsis available yet.'),
         country: mapCountry(undefined, movie),
         language: mapLanguage(undefined, movie),
+        originalLanguage: normalizeString(movie.original_language, 'en'),
         streaming: [],
         decade: getDecade(year),
     };
@@ -395,6 +450,7 @@ function mapDetailedMovie(details, genreMap) {
         crewMembers: mapFeaturedCrew(details),
         country: mapCountry(details, details),
         language: mapLanguage(details, details),
+        originalLanguage: normalizeString(details.original_language, base.originalLanguage),
         synopsis: normalizeString(details.overview, base.synopsis),
         releaseDate: normalizeString(details.release_date, base.releaseDate),
         trailerUrl: pickBestTrailer(details),
@@ -561,6 +617,7 @@ function getDateRange(query) {
 }
 async function buildBrowseDiscoverQuery(query) {
     const genreIdMap = await getGenreIdMap();
+    const languageCodeByLabel = createLanguageCodeByLabel(query.languageOptions);
     const [directorIds, castIds] = await Promise.all([
         query.directorQuery ? searchPeopleIds(query.directorQuery, 'Directing') : Promise.resolve([]),
         query.castQuery ? searchPeopleIds(query.castQuery, 'Acting') : Promise.resolve([]),
@@ -572,6 +629,9 @@ async function buildBrowseDiscoverQuery(query) {
     const providerIds = (query.streamingPlatforms ?? [])
         .map((label) => browseStreamingPlatforms.find((platform) => platform.label === label)?.value)
         .filter((providerId) => Boolean(providerId));
+    const languageCodes = (query.languages ?? [])
+        .map((label) => languageCodeByLabel.get(label))
+        .filter((code) => Boolean(code));
     return {
         include_adult: false,
         include_video: false,
@@ -585,7 +645,7 @@ async function buildBrowseDiscoverQuery(query) {
         with_cast: castIds.length ? castIds.join('|') : undefined,
         with_crew: directorIds.length ? directorIds.join('|') : undefined,
         with_genres: genreIds.length ? genreIds.join(',') : undefined,
-        with_origin_country: query.country ? browseCountryCodeByLabel[query.country] : undefined,
+        with_original_language: languageCodes.length ? languageCodes.join('|') : undefined,
         'with_runtime.gte': query.minRuntime && query.minRuntime > 0 ? query.minRuntime : undefined,
         'with_runtime.lte': query.maxRuntime && query.maxRuntime < 240 ? query.maxRuntime : undefined,
         with_watch_providers: providerIds.length ? providerIds.join('|') : undefined,
@@ -596,10 +656,14 @@ function matchesBrowseMovie(movie, query, options) {
     const normalizedSearch = query.query?.trim().toLowerCase() ?? '';
     const normalizedDirectorQuery = query.directorQuery?.trim().toLowerCase() ?? '';
     const normalizedCastQuery = query.castQuery?.trim().toLowerCase() ?? '';
-    const normalizedCountry = query.country ? normalizeBrowseCountry(query.country) : '';
+    const languageCodeByLabel = createLanguageCodeByLabel(query.languageOptions);
+    const selectedLanguageCodes = (query.languages ?? [])
+        .map((label) => languageCodeByLabel.get(label))
+        .filter((code) => Boolean(code));
     return ((!(query.genres?.length) || movie.genres.some((genre) => query.genres?.includes(genre))) &&
         (!(query.verdicts?.length) || query.verdicts.includes(movie.verdict)) &&
         (!(query.decades?.length) || query.decades.includes(movie.decade)) &&
+        (!selectedLanguageCodes.length || selectedLanguageCodes.includes(movie.originalLanguage)) &&
         matchesStreamingPlatforms(movie, query.streamingPlatforms, {
             skipMissingMovieStreaming: options?.skipStreamingPlatforms,
         }) &&
@@ -609,7 +673,6 @@ function matchesBrowseMovie(movie, query, options) {
         (query.exactYear === undefined || movie.year === query.exactYear) &&
         (query.minRuntime === undefined || (movie.runtime > 0 && movie.runtime >= query.minRuntime)) &&
         (query.maxRuntime === undefined || (movie.runtime > 0 && movie.runtime <= query.maxRuntime)) &&
-        (!normalizedCountry || normalizeBrowseCountry(movie.country) === normalizedCountry) &&
         (!normalizedDirectorQuery || movie.director.toLowerCase().includes(normalizedDirectorQuery)) &&
         (!normalizedCastQuery ||
             movie.cast.some((member) => member.toLowerCase().includes(normalizedCastQuery))) &&
@@ -637,7 +700,7 @@ async function fetchBrowseCatalogPage(query) {
             query.exactYear !== undefined ||
             query.minRuntime !== undefined ||
             query.maxRuntime !== undefined ||
-            query.country ||
+            query.languages?.length ||
             query.streamingPlatforms?.length ||
             query.directorQuery?.trim() ||
             query.castQuery?.trim()));

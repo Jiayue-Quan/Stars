@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
+  ArrowLeft,
   Bookmark,
   Check,
   Heart,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { PosterImage } from '@/components/ui-custom';
+import { ConfirmModal, PosterImage } from '@/components/ui-custom';
 import { useToast } from '@/hooks/use-toast';
 import { useMovieFeedback } from '@/hooks/use-movie-feedback';
 import { useUserLibrary } from '@/hooks/use-user-library';
@@ -106,19 +107,9 @@ function getRatingTone(type, hasData, score) {
     };
   }
 
-  if (type === 'community') {
-    return {
-      cardClassName: `border-violet-400/22 bg-[linear-gradient(180deg,rgba(96,103,220,0.16),rgba(114,67,185,0.12),rgba(15,14,30,0.9))] shadow-[0_12px_34px_rgba(88,80,190,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(88,80,190,0.16)] ${!hasData ? 'opacity-88' : ''}`,
-      labelClassName: 'text-violet-100/66',
-      valueClassName: hasData ? 'text-violet-100' : 'text-white',
-      hintClassName: 'text-violet-100/62',
-      badgeClassName: 'border-violet-300/18 bg-violet-300/8 text-violet-100/74',
-    };
-  }
-
   if (!Number.isFinite(score)) {
     return {
-      cardClassName: 'border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] shadow-[0_12px_36px_rgba(0,0,0,0.16)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(255,214,102,0.08)]',
+      cardClassName: 'border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.02))] shadow-[0_12px_36px_rgba(0,0,0,0.16)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(255,255,255,0.08)]',
       labelClassName: 'text-white/50',
       valueClassName: 'text-white',
       hintClassName: 'text-white/60',
@@ -126,42 +117,32 @@ function getRatingTone(type, hasData, score) {
     };
   }
 
-  if (score >= 8) {
-    return {
-      cardClassName: 'border-yellow-300/34 bg-[linear-gradient(180deg,rgba(250,204,21,0.24),rgba(132,93,12,0.14),rgba(27,21,10,0.9))] shadow-[0_16px_46px_rgba(250,204,21,0.16)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_52px_rgba(250,204,21,0.2)]',
-      labelClassName: 'text-yellow-100/74',
-      valueClassName: 'text-yellow-200',
-      hintClassName: 'text-yellow-100/72',
-      badgeClassName: 'border-yellow-300/24 bg-yellow-200/10 text-yellow-100',
-    };
-  }
-
   if (score >= 7) {
     return {
-      cardClassName: 'border-amber-300/32 bg-[linear-gradient(180deg,rgba(245,158,11,0.22),rgba(112,72,10,0.14),rgba(29,21,9,0.9))] shadow-[0_16px_44px_rgba(245,158,11,0.16)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_50px_rgba(245,158,11,0.18)]',
-      labelClassName: 'text-amber-100/74',
-      valueClassName: 'text-amber-200',
-      hintClassName: 'text-amber-100/72',
-      badgeClassName: 'border-amber-300/24 bg-amber-200/10 text-amber-100',
+      cardClassName: 'border-[rgba(80,255,140,0.3)] bg-[linear-gradient(180deg,rgba(80,255,140,0.12),rgba(80,255,140,0.04),rgba(10,14,11,0.92))] shadow-[0_16px_44px_rgba(80,255,140,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_52px_rgba(80,255,140,0.18)]',
+      labelClassName: 'text-[#98f5b6]/74',
+      valueClassName: 'text-[#4ADE80]',
+      hintClassName: 'text-[#b7f7cb]/72',
+      badgeClassName: 'border-[rgba(80,255,140,0.22)] bg-[rgba(80,255,140,0.08)] text-[#98f5b6]',
     };
   }
 
-  if (score >= 6) {
+  if (score >= 5) {
     return {
-      cardClassName: 'border-orange-300/32 bg-[linear-gradient(180deg,rgba(251,146,60,0.22),rgba(108,54,14,0.14),rgba(30,18,10,0.9))] shadow-[0_16px_44px_rgba(251,146,60,0.16)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_50px_rgba(251,146,60,0.18)]',
-      labelClassName: 'text-orange-100/74',
-      valueClassName: 'text-orange-200',
-      hintClassName: 'text-orange-100/72',
-      badgeClassName: 'border-orange-300/24 bg-orange-200/10 text-orange-100',
+      cardClassName: 'border-[rgba(255,200,80,0.3)] bg-[linear-gradient(180deg,rgba(255,209,102,0.12),rgba(255,209,102,0.04),rgba(17,14,9,0.92))] shadow-[0_16px_44px_rgba(255,200,80,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_50px_rgba(255,200,80,0.18)]',
+      labelClassName: 'text-[#ffe3a0]/74',
+      valueClassName: 'text-[#FFD166]',
+      hintClassName: 'text-[#ffe8b7]/72',
+      badgeClassName: 'border-[rgba(255,200,80,0.22)] bg-[rgba(255,209,102,0.08)] text-[#ffe3a0]',
     };
   }
 
   return {
-    cardClassName: 'border-red-400/30 bg-[linear-gradient(180deg,rgba(248,113,113,0.22),rgba(108,30,36,0.14),rgba(32,12,15,0.9))] shadow-[0_16px_44px_rgba(248,113,113,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_50px_rgba(248,113,113,0.18)]',
-    labelClassName: 'text-red-100/74',
-    valueClassName: 'text-red-200',
-    hintClassName: 'text-red-100/72',
-    badgeClassName: 'border-red-300/24 bg-red-200/10 text-red-100',
+    cardClassName: 'border-[rgba(255,80,80,0.3)] bg-[linear-gradient(180deg,rgba(255,107,107,0.12),rgba(255,107,107,0.04),rgba(18,10,10,0.92))] shadow-[0_16px_44px_rgba(255,80,80,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_50px_rgba(255,80,80,0.18)]',
+    labelClassName: 'text-[#ffb3b3]/74',
+    valueClassName: 'text-[#FF6B6B]',
+    hintClassName: 'text-[#ffc2c2]/72',
+    badgeClassName: 'border-[rgba(255,80,80,0.22)] bg-[rgba(255,107,107,0.08)] text-[#ffb3b3]',
   };
 }
 
@@ -272,7 +253,18 @@ export function Review() {
   const [ratingInput, setRatingInput] = useState(0);
   const [reviewInput, setReviewInput] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [isDeletingReview, setIsDeletingReview] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const { feedback, isLoading: isFeedbackLoading } = useMovieFeedback(movie?.id);
+
+  function handleBack() {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate('/browse');
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -336,11 +328,30 @@ export function Review() {
   }, [id]);
 
   const userEntry = currentUser ? feedback.entries.find((entry) => entry.userId === currentUser.uid) ?? null : null;
+  const hasUserFeedback = Boolean(userEntry?.rating || userEntry?.reviewText || userEntry?.spoilerText);
 
   useEffect(() => {
     setRatingInput(userEntry?.rating ?? 0);
     setReviewInput(userEntry?.reviewText ?? '');
   }, [movie?.id, userEntry?.rating, userEntry?.reviewText]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        if (window.history.length > 1) {
+          navigate(-1);
+          return;
+        }
+
+        navigate('/browse');
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [navigate]);
 
   if (isLoading && !movie) {
     return (
@@ -485,6 +496,51 @@ export function Review() {
     }
   }
 
+  async function handleDeleteReview() {
+    if (!hasUserFeedback) {
+      return;
+    }
+
+    setIsDeletingReview(true);
+
+    try {
+      await saveMovieFeedback({
+        movieId: movie.id,
+        user: currentUser,
+        rating: null,
+        reviewText: '',
+        spoilerText: '',
+      });
+
+      setRatingInput(0);
+      setReviewInput('');
+      setIsEditorOpen(false);
+      setIsDeleteModalOpen(false);
+      toast({
+        title: 'Review deleted',
+        description: 'Your rating and review have been removed from this movie page.',
+        variant: 'success',
+      });
+    } catch (error) {
+      if (isMovieFeedbackAuthError(error)) {
+        toast({
+          title: 'Sign in required',
+          description: 'Sign in to manage your movie review.',
+          variant: 'destructive',
+        });
+      } else {
+        console.error('Failed to delete movie feedback', error);
+        toast({
+          title: 'Delete failed',
+          description: 'Please try again in a moment.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsDeletingReview(false);
+    }
+  }
+
   function openPerson(personId) {
     if (!personId) {
       return;
@@ -522,6 +578,17 @@ export function Review() {
         </div>
 
         <div className="relative mx-auto max-w-7xl px-4 pb-12 pt-10 sm:px-6 lg:px-8">
+          <div className="mb-6 flex justify-start">
+            <Button
+              type="button"
+              className="btn-outline sticky top-20 cursor-pointer rounded-full px-5 shadow-[0_14px_34px_rgba(0,0,0,0.2)] hover:shadow-[0_18px_42px_rgba(210,109,71,0.22)]"
+              onClick={handleBack}
+              aria-label="Go back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          </div>
           <div className="grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
             <div className="mx-auto w-full max-w-[320px]">
               <div className="overflow-hidden rounded-[2rem] border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
@@ -555,6 +622,7 @@ export function Review() {
                     value={averageRating !== null ? `${averageRating} (${totalRatings.toLocaleString()} ${totalRatings === 1 ? 'rating' : 'ratings'})` : 'No app ratings'}
                     hint={averageRating !== null ? 'community' : 'community'}
                     tone="community"
+                    score={averageRating}
                     hasData={averageRating !== null}
                   />
                 </div>
@@ -569,7 +637,7 @@ export function Review() {
                   <Button
                     className={`rounded-full border px-5 transition-all duration-200 ${
                       isInWatchlist
-                        ? 'border-[#d26d47]/45 bg-[#d26d47]/18 text-white shadow-[0_10px_28px_rgba(210,109,71,0.14)]'
+                        ? 'border-yellow-300/40 bg-yellow-200/10 font-semibold text-yellow-50 shadow-[0_10px_28px_rgba(250,204,21,0.16)] hover:border-yellow-200/50 hover:bg-yellow-200/14 hover:shadow-[0_14px_34px_rgba(250,204,21,0.2)]'
                         : 'btn-outline'
                     }`}
                     onClick={() =>
@@ -581,18 +649,20 @@ export function Review() {
                       )
                     }
                   >
-                    <Bookmark className="mr-2 h-4 w-4" />
+                    <Bookmark className={`mr-2 h-4 w-4 transition-all duration-200 ${isInWatchlist ? 'fill-yellow-300 text-yellow-300' : ''}`} />
                     {isInWatchlist ? 'In Watchlist' : 'Watchlist'}
                   </Button>
                   <Button
                     className={`rounded-full border px-5 transition-all duration-200 ${
-                      isEditorOpen
-                        ? 'border-[#d26d47]/45 bg-[#d26d47]/18 text-white shadow-[0_10px_28px_rgba(210,109,71,0.14)]'
+                      userEntry?.rating
+                        ? 'border-red-400/45 bg-red-500/14 font-semibold text-white shadow-[0_10px_28px_rgba(239,68,68,0.14)] hover:border-red-300/50 hover:bg-red-500/18 hover:shadow-[0_14px_34px_rgba(239,68,68,0.18)]'
+                        : isEditorOpen
+                          ? 'border-[#d26d47]/45 bg-[#d26d47]/18 text-white shadow-[0_10px_28px_rgba(210,109,71,0.14)]'
                         : 'btn-outline'
                     }`}
                     onClick={() => setIsEditorOpen((current) => !current)}
                   >
-                    <Star className="mr-2 h-4 w-4" />
+                    <Star className={`mr-2 h-4 w-4 transition-all duration-200 ${userEntry?.rating ? 'fill-red-500 text-red-400' : ''}`} />
                     Rate
                   </Button>
                   {movie.trailerUrl ? (
@@ -707,9 +777,18 @@ export function Review() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <Button className="btn-primary" onClick={() => void handleSubmitReview()} disabled={isSubmittingReview}>
+                  <Button className="btn-primary" onClick={() => void handleSubmitReview()} disabled={isSubmittingReview || isDeletingReview}>
                     {isSubmittingReview ? 'Saving...' : 'Save Review'}
                   </Button>
+                  {hasUserFeedback ? (
+                    <Button
+                      className="rounded-full border border-red-400/28 bg-red-500/8 px-5 text-red-100 transition-all duration-200 hover:border-red-300/38 hover:bg-red-500/12 hover:text-white hover:shadow-[0_14px_30px_rgba(239,68,68,0.14)]"
+                      onClick={() => setIsDeleteModalOpen(true)}
+                      disabled={isSubmittingReview || isDeletingReview}
+                    >
+                      Delete Review
+                    </Button>
+                  ) : null}
                   <Button className="btn-outline" onClick={() => setIsEditorOpen(false)}>
                     Close
                   </Button>
@@ -937,6 +1016,16 @@ export function Review() {
           </aside>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={isDeleteModalOpen}
+        title="Delete review?"
+        message="Delete your rating and review? This cannot be undone."
+        confirmLabel="Delete review"
+        cancelLabel="Cancel"
+        isConfirming={isDeletingReview}
+        onCancel={() => setIsDeleteModalOpen(false)}
+        onConfirm={() => void handleDeleteReview()}
+      />
     </div>
   );
 }

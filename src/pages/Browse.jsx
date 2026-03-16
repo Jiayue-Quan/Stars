@@ -10,8 +10,8 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useGlobalSearch } from '@/hooks/use-global-search';
 import { useToast } from '@/hooks/use-toast';
 import { useUserLibrary } from '@/hooks/use-user-library';
-import { browseCountries, browseDecades, browseGenres, browseStreamingPlatforms } from '@/lib/movie-constants';
-import { fetchBrowseMovies, fetchTrendingMovies, serializeBrowseMovieQuery } from '@/lib/tmdb-movies';
+import { browseDecades, browseGenres, browseStreamingPlatforms } from '@/lib/movie-constants';
+import { fetchBrowseLanguages, fetchBrowseMovies, fetchTrendingMovies, serializeBrowseMovieQuery } from '@/lib/tmdb-movies';
 import { isLibraryAuthError, toggleLibraryItem } from '@/lib/user-library';
 const yearBounds = [1940, new Date().getFullYear()];
 const initialCatalogPages = 1;
@@ -155,16 +155,19 @@ export function Browse() {
     const [sortBy, setSortBy] = useState(null);
     const [showFilters, setShowFilters] = useState(true);
     const [selectedGenres, setSelectedGenres] = useState([]);
+    const [selectedLanguages, setSelectedLanguages] = useState([]);
     const [selectedVerdicts, setSelectedVerdicts] = useState([]);
     const [selectedDecades, setSelectedDecades] = useState([]);
     const [selectedStreamingServices, setSelectedStreamingServices] = useState([]);
     const [minRating, setMinRating] = useState([0]);
     const [yearRange, setYearRange] = useState([yearBounds[0], yearBounds[1]]);
     const [runtimeRange, setRuntimeRange] = useState([0, 240]);
-    const [selectedCountry, setSelectedCountry] = useState(() => searchParams.get('country') ?? '');
     const [exactYear, setExactYear] = useState('');
     const [directorQuery, setDirectorQuery] = useState('');
     const [castQuery, setCastQuery] = useState('');
+    const [languageOptions, setLanguageOptions] = useState([]);
+    const [isLanguageOptionsLoading, setIsLanguageOptionsLoading] = useState(true);
+    const [showAllLanguages, setShowAllLanguages] = useState(false);
     const [trendingMovies, setTrendingMovies] = useState([]);
     const urlSearchQuery = searchParams.get('q') ?? '';
     const [searchInputValue, setSearchInputValue] = useState(urlSearchQuery);
@@ -183,21 +186,14 @@ export function Browse() {
     });
     const [renderLimit, setRenderLimit] = useState(initialRenderCount.grid);
     const renderMoreRef = useRef(null);
-    const urlCountryFilter = searchParams.get('country') ?? '';
     const { trimmedQuery: trimmedGlobalQuery, results: globalSearchResults, isLoading: isGlobalSearchLoading, errorMessage: globalSearchError, hasQuery: hasGlobalSearchQuery, } = useGlobalSearch(debouncedSearchQuery, { limit: 60, maxPages: 3 });
     useEffect(() => {
         setSearchInputValue(urlSearchQuery);
     }, [urlSearchQuery]);
     useEffect(() => {
-        setSelectedCountry(urlCountryFilter);
-    }, [urlCountryFilter]);
-    useEffect(() => {
         const normalizedSearchValue = debouncedSearchQuery.trim();
         const normalizedUrlSearchValue = urlSearchQuery.trim();
-        const normalizedCountryValue = selectedCountry.trim();
-        const normalizedUrlCountryValue = urlCountryFilter.trim();
-        if (normalizedSearchValue === normalizedUrlSearchValue &&
-            normalizedCountryValue === normalizedUrlCountryValue) {
+        if (normalizedSearchValue === normalizedUrlSearchValue) {
             return;
         }
         const nextParams = new URLSearchParams(searchParams);
@@ -207,14 +203,35 @@ export function Browse() {
         else {
             nextParams.delete('q');
         }
-        if (normalizedCountryValue) {
-            nextParams.set('country', normalizedCountryValue);
-        }
-        else {
-            nextParams.delete('country');
-        }
         setSearchParams(nextParams, { replace: true });
-    }, [debouncedSearchQuery, searchParams, selectedCountry, setSearchParams, urlCountryFilter, urlSearchQuery]);
+    }, [debouncedSearchQuery, searchParams, setSearchParams, urlSearchQuery]);
+    useEffect(() => {
+        let cancelled = false;
+        async function loadLanguageOptions() {
+            setIsLanguageOptionsLoading(true);
+            try {
+                const languages = await fetchBrowseLanguages();
+                if (!cancelled) {
+                    setLanguageOptions(languages);
+                }
+            }
+            catch (error) {
+                console.error('Failed to load browse languages', error);
+                if (!cancelled) {
+                    setLanguageOptions([]);
+                }
+            }
+            finally {
+                if (!cancelled) {
+                    setIsLanguageOptionsLoading(false);
+                }
+            }
+        }
+        void loadLanguageOptions();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
     useEffect(() => {
         let cancelled = false;
         async function loadTrending() {
@@ -237,10 +254,10 @@ export function Browse() {
         };
     }, []);
     const activeFiltersCount = useMemo(() => selectedGenres.length +
+        selectedLanguages.length +
         selectedVerdicts.length +
         selectedDecades.length +
         selectedStreamingServices.length +
-        Number(Boolean(selectedCountry)) +
         Number(Boolean(exactYear)) +
         Number(Boolean(directorQuery.trim())) +
         Number(Boolean(castQuery.trim())) +
@@ -252,15 +269,16 @@ export function Browse() {
         exactYear,
         minRating,
         runtimeRange,
-        selectedCountry,
         selectedDecades,
         selectedGenres,
+        selectedLanguages,
         selectedStreamingServices,
         selectedVerdicts,
         yearRange,
     ]);
     const browseApiQuery = useMemo(() => ({
         genres: selectedGenres,
+        languages: selectedLanguages,
         verdicts: selectedVerdicts,
         decades: selectedDecades,
         minRating: minRating[0] > 0 ? minRating[0] : undefined,
@@ -269,7 +287,7 @@ export function Browse() {
         exactYear: exactYear ? Number(exactYear) : undefined,
         minRuntime: runtimeRange[0] > 0 ? runtimeRange[0] : undefined,
         maxRuntime: runtimeRange[1] < 240 ? runtimeRange[1] : undefined,
-        country: selectedCountry || undefined,
+        languageOptions,
         streamingPlatforms: selectedStreamingServices,
         directorQuery: directorQuery.trim() || undefined,
         castQuery: castQuery.trim() || undefined,
@@ -278,11 +296,12 @@ export function Browse() {
         castQuery,
         directorQuery,
         exactYear,
+        languageOptions,
         minRating,
         runtimeRange,
-        selectedCountry,
         selectedDecades,
         selectedGenres,
+        selectedLanguages,
         selectedStreamingServices,
         selectedVerdicts,
         sortBy,
@@ -370,23 +389,47 @@ export function Browse() {
         !catalogState.isRefreshing;
     const resetBrowseState = useCallback(() => {
         setSelectedGenres([]);
+        setSelectedLanguages([]);
         setSelectedVerdicts([]);
         setSelectedDecades([]);
         setSelectedStreamingServices([]);
         setMinRating([0]);
         setYearRange([yearBounds[0], yearBounds[1]]);
         setRuntimeRange([0, 240]);
-        setSelectedCountry('');
         setExactYear('');
         setDirectorQuery('');
         setCastQuery('');
         setSortBy(null);
+        setShowAllLanguages(false);
         setSearchInputValue('');
         const nextParams = new URLSearchParams(searchParams);
         nextParams.delete('q');
-        nextParams.delete('country');
         setSearchParams(nextParams, { replace: true });
     }, [searchParams, setSearchParams]);
+    const availableLanguageOptions = useMemo(() => {
+        const languageLabelByCode = new Map(languageOptions.map((language) => [language.value, language.label]));
+        const seen = new Set();
+        return catalogState.movies
+            .map((movie) => {
+            const code = typeof movie.originalLanguage === 'string' ? movie.originalLanguage.toLowerCase() : '';
+            const label = languageLabelByCode.get(code);
+            if (!label || seen.has(code)) {
+                return null;
+            }
+            seen.add(code);
+            return { label, value: code };
+        })
+            .filter(Boolean)
+            .sort((left, right) => left.label.localeCompare(right.label));
+    }, [catalogState.movies, languageOptions]);
+    useEffect(() => {
+        setSelectedLanguages((current) => current.filter((label) => availableLanguageOptions.some((language) => language.label === label)));
+    }, [availableLanguageOptions]);
+    useEffect(() => {
+        setShowAllLanguages(false);
+    }, [browseQueryKey]);
+    const visibleLanguageOptions = useMemo(() => showAllLanguages ? availableLanguageOptions : availableLanguageOptions.slice(0, 12), [availableLanguageOptions, showAllLanguages]);
+    const hasMoreLanguages = availableLanguageOptions.length > 12;
     const handleLoadMore = useCallback(async () => {
         const nextPage = catalogState.loadedPage + 1;
         if (nextPage > catalogState.totalPages || catalogState.isLoadingMore || catalogState.isRefreshing)
@@ -536,15 +579,34 @@ export function Browse() {
         </div>
 
         <div className="mb-6">
-          <label className="mb-3 block text-mono text-xs uppercase tracking-wider text-muted-foreground">Country</label>
-          <select value={selectedCountry} onChange={(event) => {
-            setSelectedCountry(event.target.value);
-        }} className="input-cinematic w-full py-2 text-sm">
-            <option value="">Any country</option>
-            {browseCountries.map((country) => (<option key={country} value={country}>
-                {country}
-              </option>))}
-          </select>
+          <label className="mb-3 flex items-center justify-between gap-3 text-mono text-xs uppercase tracking-wider text-muted-foreground">
+            <span>Language</span>
+            {selectedLanguages.length > 0 ? <span className="text-[11px] tracking-[0.18em] text-white/45">{selectedLanguages.length} selected</span> : null}
+          </label>
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
+            {isLanguageOptionsLoading ? (<p className="text-sm text-muted-foreground">Loading TMDB languages...</p>) : availableLanguageOptions.length > 0 ? (<>
+                <div className="max-h-52 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+                  <div className="flex flex-wrap gap-2">
+                    {visibleLanguageOptions.map((language) => {
+                        const isSelected = selectedLanguages.includes(language.label);
+                        return (<button key={language.value} type="button" onClick={() => {
+                                setSelectedLanguages((current) => current.includes(language.label)
+                                    ? current.filter((entry) => entry !== language.label)
+                                    : [...current, language.label]);
+                            }} className={`filter-chip max-w-full whitespace-normal break-words text-left leading-tight ${isSelected ? 'active' : ''}`} aria-pressed={isSelected}>
+                            <span className="min-w-0">{language.label}</span>
+                            {isSelected ? <X className="ml-1 h-3 w-3 flex-none" /> : null}
+                          </button>);
+                    })}
+                  </div>
+                </div>
+                {hasMoreLanguages ? (<button type="button" onClick={() => {
+                        setShowAllLanguages((current) => !current);
+                    }} className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/55 transition-colors hover:text-white">
+                    {showAllLanguages ? 'Show less' : `Show more (${availableLanguageOptions.length - visibleLanguageOptions.length})`}
+                  </button>) : null}
+              </>) : (<p className="text-sm text-muted-foreground">No languages with matching titles are available right now.</p>)}
+          </div>
         </div>
 
         <div className="mb-6">
@@ -557,11 +619,16 @@ export function Browse() {
         activeFiltersCount,
         isDefaultBrowseState,
         resetBrowseState,
-        selectedCountry,
         selectedDecades,
         selectedGenres,
+        availableLanguageOptions,
+        isLanguageOptionsLoading,
+        selectedLanguages,
         selectedStreamingServices,
+        showAllLanguages,
         sortBy,
+        visibleLanguageOptions,
+        hasMoreLanguages,
     ]);
     const showSkeletons = catalogState.isInitialLoading && catalogState.movies.length === 0;
     const hasActiveSort = Boolean(sortBy);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CalendarDays, Clapperboard, MapPin, Sparkles, UserRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clapperboard, MapPin, Sparkles, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { fetchPersonById, getSearchResultHref, getSearchResultTypeLabel } from '@/lib/tmdb-search';
 
@@ -122,6 +122,15 @@ export function Person() {
     visibleCount: TIMELINE_PAGE_SIZE,
   });
 
+  function handleBack() {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate('/browse');
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -154,6 +163,24 @@ export function Person() {
       cancelled = true;
     };
   }, [hasValidPersonId, personId]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        if (window.history.length > 1) {
+          navigate(-1);
+          return;
+        }
+
+        navigate('/browse');
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [navigate]);
 
   const person = state.personId === personId ? state.person : null;
   const loadError = state.personId === personId ? state.loadError : '';
@@ -222,6 +249,17 @@ export function Person() {
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-4 pb-10 pt-12 sm:px-6 lg:px-8">
+          <div className="mb-6 flex justify-start">
+            <Button
+              type="button"
+              className="btn-outline sticky top-20 cursor-pointer rounded-full px-5 shadow-[0_14px_34px_rgba(0,0,0,0.2)] hover:shadow-[0_18px_42px_rgba(210,109,71,0.22)]"
+              onClick={handleBack}
+              aria-label="Go back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          </div>
           <div className="grid gap-8 lg:grid-cols-[300px_minmax(0,1fr)]">
             <div className="w-full max-w-xs">
               <div className="overflow-hidden rounded-[1.8rem] border border-white/10 bg-white/[0.03] shadow-[0_24px_70px_-28px_rgba(0,0,0,0.95)]">
