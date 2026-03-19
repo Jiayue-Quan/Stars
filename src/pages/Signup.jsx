@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Star, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { BrandLogo } from '@/components/ui-custom/BrandLogo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getAuthErrorMessage, signUpWithEmail } from '@/lib/firebase';
@@ -51,9 +52,13 @@ export function Signup() {
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center mx-auto mb-4">
-              <Star className="w-8 h-8 fill-white text-white"/>
-            </div>
+            <BrandLogo
+              className="mb-5 justify-center"
+              stacked
+              markClassName="h-16 w-16"
+              titleClassName="text-[2.4rem]"
+              taglineClassName="text-[11px] tracking-[0.34em] text-white/42"
+            />
             <h1 className="heading-display text-3xl">Create Your Account</h1>
             <p className="text-muted-foreground mt-2">Join the STARS community</p>
           </div>

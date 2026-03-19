@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Bookmark, ChevronRight, Heart, LoaderCircle, Share2, Sparkles, Star, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PosterImage, VerdictBadge } from '@/components/ui-custom';
@@ -61,6 +61,7 @@ function getCollectionStatusLabel(collection) {
 
 export function Lists() {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { toast } = useToast();
     const { currentUser, library } = useUserLibrary();
     const [followedLists, setFollowedLists] = useState(['trending-week']);
@@ -72,6 +73,7 @@ export function Lists() {
     const collectionsRef = useRef([]);
     const loadMoreRef = useRef(null);
     const loadingCollectionIdRef = useRef('');
+    const requestedCollectionId = searchParams.get('collection') ?? '';
 
     useEffect(() => {
         let cancelled = false;
@@ -104,6 +106,20 @@ export function Lists() {
             cancelled = true;
         };
     }, [toast]);
+
+    useEffect(() => {
+        if (!requestedCollectionId || !collections.length) {
+            return;
+        }
+
+        const matchingCollection = collections.find((collection) => collection.id === requestedCollectionId);
+        if (!matchingCollection) {
+            return;
+        }
+
+        setSelectedList((current) => current === requestedCollectionId ? current : requestedCollectionId);
+        setLoadMoreError('');
+    }, [collections, requestedCollectionId]);
 
     function mergeCollectionPage(collectionId, payload, replace = false) {
         setCollections((current) => current.map((collection) => {
@@ -284,6 +300,11 @@ export function Lists() {
             <button type="button" onClick={() => {
                 setSelectedList(null);
                 setLoadMoreError('');
+                setSearchParams((current) => {
+                    const nextParams = new URLSearchParams(current);
+                    nextParams.delete('collection');
+                    return nextParams;
+                }, { replace: true });
             }} className="mb-8 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
               <ChevronRight className="h-4 w-4 rotate-180"/>
               Back to Collections
@@ -459,6 +480,11 @@ export function Lists() {
           {collections.map((list) => (<div key={list.id} onClick={() => {
                 setSelectedList(list.id);
                 setLoadMoreError('');
+                setSearchParams((current) => {
+                    const nextParams = new URLSearchParams(current);
+                    nextParams.set('collection', list.id);
+                    return nextParams;
+                }, { replace: true });
             }} className="group cursor-pointer">
               <div className="relative overflow-hidden rounded-[1.8rem] border border-white/[0.08] bg-[linear-gradient(145deg,rgba(28,21,18,0.95),rgba(13,10,9,0.98))] p-3 shadow-[0_30px_80px_-42px_rgba(0,0,0,0.95)] transition-all duration-300 hover:-translate-y-1.5 hover:border-white/[0.14] hover:shadow-[0_38px_95px_-42px_rgba(0,0,0,1)]">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(244,182,132,0.14),transparent_30%)] opacity-70"/>

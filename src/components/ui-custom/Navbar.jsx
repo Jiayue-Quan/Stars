@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowUpRight, Bell, Mail, Menu, Star, User, X } from 'lucide-react';
+import { ArrowUpRight, Bell, Mail, Menu, User, X } from 'lucide-react';
 import { useAuth } from '@/components/auth/useAuth';
+import { BrandLogo } from '@/components/ui-custom/BrandLogo';
+import { SiteSearch } from '@/components/ui-custom/SiteSearch';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { preloadAppRoute } from '@/lib/route-preload';
 import { getUserDisplayName, getUserInitials } from '@/lib/user-display';
@@ -43,6 +45,7 @@ export function Navbar() {
   const displayName = getUserDisplayName(currentUser);
   const initials = getUserInitials(currentUser);
   const unreadNotificationsCount = useUnreadNotificationsCount(currentUser?.uid);
+  const showNavbarSearch = location.pathname === '/';
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
@@ -64,26 +67,15 @@ export function Navbar() {
   return (
     <nav
       className="fixed left-0 right-0 top-0 z-50 border-b border-white/[0.06] backdrop-blur-xl"
-      style={{ background: 'rgba(10, 8, 7, 0.78)' }}
+      style={{ background: 'linear-gradient(180deg, rgba(9, 8, 8, 0.9) 0%, rgba(9, 8, 8, 0.72) 100%)' }}
     >
       <div className="mx-auto max-w-[1800px] px-4 sm:px-6 lg:px-8">
         <div className="flex h-[4.5rem] items-center justify-between gap-4">
           <Link to="/" className="group flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-2xl transition-all duration-300 group-hover:scale-105"
-              style={{
-                background: 'linear-gradient(135deg, #d26d47 0%, #9f472a 100%)',
-                boxShadow: '0 12px 24px rgba(159, 71, 42, 0.35)',
-              }}
-            >
-              <Star className="h-4 w-4 fill-white text-white" />
-            </div>
-            <div className="leading-none">
-              <span className="heading-display heading-gradient block text-2xl">STARS</span>
-            </div>
+            <BrandLogo markClassName="transition-all duration-300 group-hover:scale-105" />
           </Link>
 
-          <div className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/20 p-1 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.9)] md:flex">
+          <div className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/22 p-1.5 shadow-[0_18px_45px_-30px_rgba(0,0,0,0.9)] md:flex">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
@@ -94,8 +86,8 @@ export function Navbar() {
                 style={
                   isActive(link.path)
                     ? {
-                        background: 'linear-gradient(135deg, rgba(210, 109, 71, 0.18) 0%, rgba(132, 58, 36, 0.16) 100%)',
-                        boxShadow: '0 0 20px rgba(166, 66, 34, 0.18)',
+                        background: 'linear-gradient(135deg, rgba(210, 109, 71, 0.2) 0%, rgba(132, 58, 36, 0.16) 100%)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 0 20px rgba(166, 66, 34, 0.16)',
                       }
                     : {}
                 }
@@ -106,22 +98,23 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {showNavbarSearch ? <SiteSearch variant="desktop" /> : null}
             {isAuthenticated ? (
               <>
-                <Link to="/notifications" className="relative hidden h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
+                <Link to="/notifications" className="relative hidden h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
                   <Bell className="h-4 w-4" />
                   {unreadNotificationsCount > 0 ? <span className="absolute -right-1 -top-1 rounded-full bg-[#d26d47] px-1.5 py-0.5 text-[10px] font-semibold text-white">{Math.min(unreadNotificationsCount, 99)}</span> : null}
                 </Link>
-                <Link to="/messages" className="hidden h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
+                <Link to="/messages" className="hidden h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
                   <Mail className="h-4 w-4" />
                 </Link>
                 <HoverCard openDelay={120}>
                   <HoverCardTrigger asChild>
-                    <button className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/[0.04] py-1.5 pl-1.5 pr-4 text-left transition-all duration-300 hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
+                    <button className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] py-1.5 pl-1.5 pr-4 text-left transition-all duration-300 hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
                       <UserAvatar initials={initials} photoURL={currentUser?.photoURL} />
                       <span className="min-w-0">
                         <span className="block max-w-[9rem] truncate text-sm font-semibold text-white">{displayName}</span>
-                        <span className="block text-xs text-muted-foreground">Account</span>
+                        <span className="block text-xs text-white/45">Account</span>
                       </span>
                     </button>
                   </HoverCardTrigger>

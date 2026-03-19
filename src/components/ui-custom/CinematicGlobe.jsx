@@ -161,6 +161,20 @@ export function CinematicGlobe({ countries, selectedCountryKey, pinnedCountryKey
         };
         animationFrameRef.current = requestAnimationFrame(tick);
     }, [setRotationState, stopActiveAnimation]);
+    const startSpinAnimation = useCallback((targetRotation) => {
+        requestAnimationFrame(() => {
+            setIsSpinning(true);
+            onSpinStateChange?.(true);
+        });
+        animateToRotation(targetRotation, {
+            duration: 2200,
+            extraTurns: 2,
+            onComplete: () => {
+                setIsSpinning(false);
+                onSpinStateChange?.(false);
+            },
+        });
+    }, [animateToRotation, onSpinStateChange]);
     useEffect(() => {
         const node = wrapperRef.current;
         if (!node)
@@ -240,22 +254,15 @@ export function CinematicGlobe({ countries, selectedCountryKey, pinnedCountryKey
             lastSpinTokenRef.current = spinToken;
             lastSelectedKeyRef.current = selectedCountryKey;
             requestAnimationFrame(() => {
-                setIsSpinning(true);
-                onSpinStateChange?.(true);
-            });
-            animateToRotation(targetRotation, {
-                duration: 2200,
-                extraTurns: 2,
-                onComplete: () => {
-                    setIsSpinning(false);
-                    onSpinStateChange?.(false);
-                },
+                startSpinAnimation(targetRotation);
             });
             return;
         }
         if (selectedCountryKey !== lastSelectedKeyRef.current) {
             lastSelectedKeyRef.current = selectedCountryKey;
-            animateToRotation(targetRotation, { duration: 1100 });
+            requestAnimationFrame(() => {
+                animateToRotation(targetRotation, { duration: 1100 });
+            });
         }
     }, [
         animateToRotation,
@@ -263,6 +270,7 @@ export function CinematicGlobe({ countries, selectedCountryKey, pinnedCountryKey
         onSpinStateChange,
         selectedCountry,
         selectedCountryKey,
+        startSpinAnimation,
         spinToken,
     ]);
     useEffect(() => {

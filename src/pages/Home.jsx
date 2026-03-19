@@ -1,6 +1,6 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bookmark, ChevronLeft, ChevronRight, Flame, Play, Sparkles, Star, Ticket } from 'lucide-react';
+import { ArrowRight, Bookmark, CalendarDays, ChevronLeft, ChevronRight, Clock3, Flame, Play, Sparkles, Star, Ticket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PosterImage } from '@/components/ui-custom';
@@ -11,6 +11,48 @@ import { fetchHomeFeed, fetchMoviesByRouteIds } from '@/lib/tmdb-movies';
 import { isLibraryAuthError, toggleLibraryItem } from '@/lib/user-library';
 
 const heroRotationIntervalMs = 7000;
+
+function clampCopy(value, maxLength = 220) {
+  if (!value) {
+    return '';
+  }
+
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  const safeValue = value.slice(0, maxLength);
+  const lastSpaceIndex = safeValue.lastIndexOf(' ');
+  return `${safeValue.slice(0, Math.max(lastSpaceIndex, maxLength - 24)).trimEnd()}...`;
+}
+
+function getBrowseHrefForRow(label) {
+  if (label === 'Trending Today') {
+    return '/lists?collection=trending-day';
+  }
+
+  if (label === 'Trending This Week') {
+    return '/lists?collection=trending-week';
+  }
+
+  if (label === 'In Theaters') {
+    return '/lists?collection=now-playing';
+  }
+
+  if (label === 'Popular') {
+    return '/lists?collection=popular';
+  }
+
+  if (label === 'Top Rated') {
+    return '/lists?collection=top-rated';
+  }
+
+  if (label === 'Upcoming') {
+    return '/lists?collection=upcoming';
+  }
+
+  return '/browse';
+}
 
 function formatReleaseDate(value) {
   if (!value) {
@@ -116,7 +158,7 @@ function RowCard({ movie, variant = 'poster', onOpen, onWatchTrailer, onSave, is
 
   return (
     <article
-      className={`group relative flex-none cursor-pointer ${isWide ? 'w-[18.5rem] sm:w-[21rem] lg:w-[23rem]' : 'w-[11.5rem] sm:w-[12.75rem] lg:w-[14rem]'} [content-visibility:auto] [contain-intrinsic-size:340px_260px]`}
+      className={`group relative flex-none cursor-pointer snap-start ${isWide ? 'w-[15.5rem] sm:w-[21rem] lg:w-[23rem]' : 'w-[10rem] sm:w-[12.75rem] lg:w-[14rem]'} [content-visibility:auto] [contain-intrinsic-size:340px_260px]`}
       onClick={onOpen}
     >
       <div className="relative overflow-hidden rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(0,0,0,0.3))] transition-all duration-300 ease-out group-hover:-translate-y-1.5 group-hover:scale-[1.035] group-hover:border-white/24 group-hover:shadow-[0_28px_54px_rgba(0,0,0,0.42)] motion-reduce:transform-none">
@@ -148,7 +190,7 @@ function RowCard({ movie, variant = 'poster', onOpen, onWatchTrailer, onSave, is
           </h3>
           <p className="mt-1 line-clamp-1 text-xs text-white/58">{movie.genres.slice(0, 2).join(' / ')}</p>
 
-          <div className="mt-3 translate-y-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+          <div className="mt-3 opacity-100 transition-all duration-300 md:translate-y-4 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100">
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -156,7 +198,7 @@ function RowCard({ movie, variant = 'poster', onOpen, onWatchTrailer, onSave, is
                   event.stopPropagation();
                   onWatchTrailer();
                 }}
-                className="flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-[11px] font-semibold text-black transition-colors hover:bg-white/92"
+                className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white px-3 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-black shadow-[0_18px_40px_rgba(255,255,255,0.14)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/94"
               >
                 <Play className="h-3.5 w-3.5 fill-current" />
                 Watch Trailer
@@ -167,8 +209,10 @@ function RowCard({ movie, variant = 'poster', onOpen, onWatchTrailer, onSave, is
                   event.stopPropagation();
                   onSave();
                 }}
-                className={`flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold transition-colors ${
-                  isSaved ? 'border-[#d26d47]/50 bg-[#d26d47]/18 text-[#f4c3a4]' : 'border-white/15 bg-black/40 text-white hover:bg-black/55'
+                className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 ${
+                  isSaved
+                    ? 'border-[#d26d47]/45 bg-[#d26d47]/16 text-[#f4c3a4] shadow-[0_14px_34px_rgba(210,109,71,0.12)]'
+                    : 'border-white/12 bg-black/26 text-white hover:border-white/20 hover:bg-black/38'
                 }`}
               >
                 <Bookmark className="h-3.5 w-3.5" />
@@ -182,8 +226,9 @@ function RowCard({ movie, variant = 'poster', onOpen, onWatchTrailer, onSave, is
   );
 }
 
-function MovieRow({ label, title, movies, variant = 'poster', accent = 'default', navigate, watchlistSet, onSave }) {
+function MovieRow({ label, title, movies, variant = 'poster', accent = 'default', navigate, watchlistSet, onSave, browseHref = '/browse' }) {
   const [scroller, setScroller] = useState(null);
+  const [canScroll, setCanScroll] = useState(false);
   const tintClassName = accent === 'ember'
     ? 'from-[#2e130d]/55 via-transparent to-transparent'
     : accent === 'steel'
@@ -192,8 +237,36 @@ function MovieRow({ label, title, movies, variant = 'poster', accent = 'default'
         ? 'from-[#2c2510]/55 via-transparent to-transparent'
         : 'from-white/5 via-transparent to-transparent';
 
-  function handleScroll(direction) {
+  useEffect(() => {
     if (!scroller) {
+      return undefined;
+    }
+
+    const updateCanScroll = () => {
+      setCanScroll(scroller.scrollWidth - scroller.clientWidth > 24);
+    };
+
+    const frameId = window.requestAnimationFrame(() => {
+      updateCanScroll();
+    });
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateCanScroll();
+    });
+
+    resizeObserver.observe(scroller);
+    Array.from(scroller.children).forEach((child) => {
+      resizeObserver.observe(child);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+    };
+  }, [movies, scroller]);
+
+  function handleScroll(direction) {
+    if (!scroller || !canScroll) {
       return;
     }
 
@@ -206,45 +279,62 @@ function MovieRow({ label, title, movies, variant = 'poster', accent = 'default'
 
   return (
     <section className="px-4 sm:px-6 lg:px-8">
-      <div className={`mx-auto max-w-[96rem] rounded-[1.8rem] bg-gradient-to-r ${tintClassName} px-0 py-1`}>
-        <div className="mb-4 flex items-end justify-between gap-4 px-1">
+      <div className={`mx-auto max-w-[96rem] rounded-[1.8rem] bg-gradient-to-r ${tintClassName} px-0 py-4`}>
+        <div className="mb-4 flex items-end justify-between gap-4 px-4 sm:px-1">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/45">{label}</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-[2rem]">{title}</h2>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleScroll(-1)}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/75 transition-colors hover:border-white/20 hover:text-white"
-              aria-label={`Scroll ${title} left`}
+            <Button
+              variant="outline"
+              className="hidden rounded-full border-white/12 bg-black/25 text-white hover:bg-black/40 sm:inline-flex"
+              onClick={() => navigate(browseHref)}
             >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleScroll(1)}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/75 transition-colors hover:border-white/20 hover:text-white"
-              aria-label={`Scroll ${title} right`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+              View All
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+            {canScroll ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleScroll(-1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/75 transition-colors hover:border-white/20 hover:text-white"
+                  aria-label={`Scroll ${title} left`}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleScroll(1)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/75 transition-colors hover:border-white/20 hover:text-white"
+                  aria-label={`Scroll ${title} right`}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
 
-        <div ref={setScroller} className="flex gap-4 overflow-x-auto pb-4 [scrollbar-color:rgba(255,255,255,0.18)_transparent] [scrollbar-width:thin]">
-          {movies.map((movie, index) => (
-            <RowCard
-              key={movie.id}
-              movie={movie}
-              variant={variant}
-              eager={index < 2}
-              isSaved={watchlistSet.has(movie.id)}
-              onOpen={() => navigate(`/review/${movie.id}`)}
-              onWatchTrailer={() => openExternalUrl(movie.trailerUrl || buildYouTubeSearchUrl(`${movie.title} ${movie.year} trailer`))}
-              onSave={() => void onSave(movie.id)}
-            />
-          ))}
+        <div className="overflow-hidden rounded-[1.5rem]">
+          <div
+            ref={setScroller}
+            className="flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 pr-6 sm:px-1 [scrollbar-color:rgba(255,255,255,0.18)_transparent] [scrollbar-width:thin]"
+          >
+            {movies.map((movie, index) => (
+              <RowCard
+                key={movie.id}
+                movie={movie}
+                variant={variant}
+                eager={index < 2}
+                isSaved={watchlistSet.has(movie.id)}
+                onOpen={() => navigate(`/review/${movie.id}`)}
+                onWatchTrailer={() => openExternalUrl(movie.trailerUrl || buildYouTubeSearchUrl(`${movie.title} ${movie.year} trailer`))}
+                onSave={() => void onSave(movie.id)}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -406,6 +496,19 @@ export function Home() {
   }, [feed?.heroCandidates?.length]);
 
   useEffect(() => {
+    const candidates = feed?.heroCandidates ?? [];
+    candidates.forEach((movie) => {
+      const imageUrl = movie?.backdrop || movie?.poster;
+      if (!imageUrl) {
+        return;
+      }
+
+      const image = new window.Image();
+      image.src = imageUrl;
+    });
+  }, [feed?.heroCandidates]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadRecommendations() {
@@ -562,6 +665,8 @@ export function Home() {
   const primaryRecommendation = recommendedMovies[0] ?? null;
   const trendingTodayMovie = feed?.trendingTodayMovies?.[0] ?? null;
   const upcomingMovie = feed?.upcomingMovies?.[0] ?? null;
+  const heroGenres = spotlightMovie.genres.slice(0, 3);
+  const heroSynopsis = clampCopy(spotlightMovie.synopsis, 240);
 
   return (
     <div className="min-h-screen bg-[#060708] pb-24 pt-16 text-white">
@@ -570,12 +675,12 @@ export function Home() {
           {heroCandidates.map((movie, index) => (
             <div
               key={movie.id}
-              className={`absolute inset-0 transition-opacity duration-700 ${index === activeHeroIndex ? 'opacity-100' : 'opacity-0'}`}
+              className={`absolute inset-0 will-change-opacity transition-opacity duration-1000 ease-out ${index === activeHeroIndex ? 'opacity-100' : 'opacity-0'}`}
             >
               <div
-                className="absolute inset-0 scale-[1.02] motion-safe:animate-[pulse_12s_ease-in-out_infinite]"
+                className="absolute inset-0"
                 style={{
-                  backgroundImage: `linear-gradient(180deg, rgba(6,7,8,0.12) 0%, rgba(6,7,8,0.56) 52%, #060708 100%), linear-gradient(90deg, rgba(6,7,8,0.93) 0%, rgba(6,7,8,0.72) 34%, rgba(6,7,8,0.18) 68%, rgba(6,7,8,0.88) 100%), url(${movie.backdrop || movie.poster})`,
+                  backgroundImage: `linear-gradient(180deg, rgba(5,6,8,0.08) 0%, rgba(5,6,8,0.5) 46%, #060708 100%), linear-gradient(90deg, rgba(6,7,8,0.98) 0%, rgba(6,7,8,0.93) 22%, rgba(6,7,8,0.72) 42%, rgba(6,7,8,0.24) 70%, rgba(6,7,8,0.88) 100%), url(${movie.backdrop || movie.poster})`,
                   backgroundPosition: 'center',
                   backgroundSize: 'cover',
                 }}
@@ -584,91 +689,137 @@ export function Home() {
           ))}
         </div>
 
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute left-[-12rem] top-[8rem] h-[22rem] w-[22rem] rounded-full bg-[#d26d47]/12 blur-3xl" />
+          <div className="absolute right-[8%] top-[16%] h-[20rem] w-[20rem] rounded-full bg-[#2a5f7b]/12 blur-3xl" />
+          <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-b from-transparent to-[#060708]" />
+        </div>
+
         <div className="relative mx-auto max-w-[96rem] px-4 sm:px-6 lg:px-8">
-          <div className="flex min-h-[76vh] items-end py-10 sm:py-14 lg:min-h-[84vh] lg:py-16">
-            <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/72 backdrop-blur-sm">
+          <div className="grid min-h-[76vh] items-end gap-10 py-12 sm:py-16 lg:min-h-[84vh] lg:grid-cols-[minmax(0,1.25fr)_22rem] lg:py-20 xl:grid-cols-[minmax(0,1.2fr)_24rem]">
+            <div className="max-w-[54rem] pr-2 sm:pr-0">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/28 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/72 backdrop-blur-md">
                 <Sparkles className="h-3.5 w-3.5 text-[#f4b684]" />
-                Live TMDB Hero Rotation
+                Curated TMDB Spotlight
               </div>
-              <h1 className="mt-5 text-5xl font-semibold leading-none tracking-[-0.04em] text-white sm:text-6xl lg:text-8xl">
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/48">
+                <span>Featured Now</span>
+                <span className="h-1 w-1 rounded-full bg-[#d26d47]/70" />
+                <span>{spotlightMovie.year}</span>
+                <span className="h-1 w-1 rounded-full bg-[#d26d47]/70" />
+                <span>{heroGenres.join(' / ')}</span>
+              </div>
+
+              <h1 className="mt-4 min-h-[2.8em] max-w-[11ch] text-5xl font-semibold leading-[0.9] tracking-[-0.06em] text-white drop-shadow-[0_10px_30px_rgba(0,0,0,0.38)] sm:min-h-[2.8em] sm:text-6xl lg:min-h-[2.7em] lg:text-[5.6rem] xl:text-[7.15rem]">
                 {spotlightMovie.title}
               </h1>
-              <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-white/72">
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#d26d47]/30 bg-[#d26d47]/15 px-3 py-1.5 font-semibold text-[#f4b684]">
-                  <Star className="h-3.5 w-3.5 fill-current" />
-                  TMDB {spotlightMovie.score.toFixed(1)}
-                </span>
-                <span>{spotlightMovie.year}</span>
-                {spotlightMovie.runtime ? <span>{spotlightMovie.runtime} min</span> : null}
-                <span>{spotlightMovie.genres.slice(0, 3).join(' / ')}</span>
-                <span>{formatReleaseDate(spotlightMovie.releaseDate)}</span>
-              </div>
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-white/78 sm:text-base">{spotlightMovie.synopsis}</p>
+
+              <p className="mt-6 max-w-[38rem] text-[15px] leading-7 text-white/78 sm:text-[17px] sm:leading-8">
+                {heroSynopsis}
+              </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
-                <Button className="rounded-full bg-white px-6 text-black hover:bg-white/92" onClick={() => navigate(`/review/${spotlightMovie.id}`)}>
-                  <Play className="mr-2 h-4 w-4 fill-current" />
-                  View Details
-                </Button>
-                <Button
-                  variant="outline"
-                  className="rounded-full border-white/15 bg-black/35 px-6 text-white hover:bg-black/55"
-                  onClick={() => openExternalUrl(spotlightMovie.trailerUrl || buildYouTubeSearchUrl(`${spotlightMovie.title} ${spotlightMovie.year} trailer`))}
-                >
-                  Watch Trailer
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="rounded-full border-white/15 bg-black/35 px-6 text-white hover:bg-black/55"
-                  onClick={() => void handleSaveMovie(spotlightMovie.id)}
-                >
-                  <Bookmark className="mr-2 h-4 w-4" />
-                  {isHeroSaved ? 'Saved to My List' : 'Add to My List'}
-                </Button>
-              </div>
-
-              <div className="mt-8 flex flex-wrap items-center gap-4">
-                {heroCandidates.map((movie, index) => (
-                  <button
-                    key={movie.id}
-                    type="button"
-                    onClick={() => setActiveHeroIndex(index)}
-                    className={`h-2.5 rounded-full transition-all ${index === activeHeroIndex ? 'w-12 bg-white' : 'w-6 bg-white/28 hover:bg-white/45'}`}
-                    aria-label={`Show featured movie ${movie.title}`}
-                  />
-                ))}
-              </div>
-
-              <div className="mt-10 flex flex-wrap gap-4">
-                <div className="rounded-2xl border border-white/10 bg-black/28 px-4 py-3 backdrop-blur-sm">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/42">Trending Today</p>
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-white/82">
-                    <Flame className="h-4 w-4 text-[#f4b684]" />
-                    Same-day TMDB movie momentum
-                  </p>
+                <div className="inline-flex items-center gap-2 rounded-2xl border border-[#d26d47]/22 bg-[#d26d47]/10 px-4 py-3 text-sm text-[#ffd8bb] backdrop-blur-md">
+                  <Star className="h-4 w-4 fill-current" />
+                  <span className="font-semibold">TMDB {spotlightMovie.score.toFixed(1)}</span>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-black/28 px-4 py-3 backdrop-blur-sm">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/42">In Theaters</p>
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-white/82">
-                    <Ticket className="h-4 w-4 text-[#f4b684]" />
-                    Current theatrical releases
-                  </p>
+                <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/24 px-4 py-3 text-sm text-white/74 backdrop-blur-md">
+                  <CalendarDays className="h-4 w-4 text-[#f4b684]" />
+                  <span>{formatReleaseDate(spotlightMovie.releaseDate)}</span>
                 </div>
-                {primaryRecommendation ? (
-                  <div className="rounded-2xl border border-white/10 bg-black/28 px-4 py-3 backdrop-blur-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/42">Recommended</p>
-                    <p className="mt-2 text-sm text-white/82">Because your saved movies lean {primaryRecommendation.genres[0]}</p>
+                {spotlightMovie.runtime ? (
+                  <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/24 px-4 py-3 text-sm text-white/74 backdrop-blur-md">
+                    <Clock3 className="h-4 w-4 text-[#f4b684]" />
+                    <span>{spotlightMovie.runtime} min runtime</span>
                   </div>
                 ) : null}
+              </div>
+
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-black shadow-[0_18px_40px_rgba(255,255,255,0.14)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/94"
+                  onClick={() => navigate(`/review/${spotlightMovie.id}`)}
+                >
+                  Open Details
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/12 bg-black/26 px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-white backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-black/38"
+                  onClick={() => openExternalUrl(spotlightMovie.trailerUrl || buildYouTubeSearchUrl(`${spotlightMovie.title} ${spotlightMovie.year} trailer`))}
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  Watch Trailer
+                </button>
+                <button
+                  type="button"
+                  className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl border px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 ${
+                    isHeroSaved
+                      ? 'border-[#d26d47]/45 bg-[#d26d47]/16 text-[#f4c3a4] shadow-[0_14px_34px_rgba(210,109,71,0.12)]'
+                      : 'border-white/12 bg-black/26 text-white hover:border-white/20 hover:bg-black/38'
+                  }`}
+                  onClick={() => void handleSaveMovie(spotlightMovie.id)}
+                >
+                  <Bookmark className="h-3.5 w-3.5" />
+                  {isHeroSaved ? 'Saved To List' : 'Add To List'}
+                </button>
+              </div>
+
+              <div className="mt-10 flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-2" aria-label="Hero rotation status" role="status">
+                  {heroCandidates.map((movie, index) => (
+                    <div
+                      key={movie.id}
+                      className={`h-2.5 rounded-full transition-all duration-700 ${index === activeHeroIndex ? 'w-12 bg-white' : 'w-6 bg-white/28'}`}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </div>
+                <p className="select-none text-xs uppercase tracking-[0.22em] text-white/38">Auto-rotating featured lineup</p>
+              </div>
+
+              <div className="mt-10 flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.2em] text-white/44">
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/18 px-4 py-2">
+                  <Flame className="h-3.5 w-3.5 text-[#f4b684]" />
+                  Trending today is live
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/18 px-4 py-2">
+                  <Ticket className="h-3.5 w-3.5 text-[#f4b684]" />
+                  In-theaters picks below
+                </span>
+                {primaryRecommendation ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/18 px-4 py-2">
+                    <Sparkles className="h-3.5 w-3.5 text-[#f4b684]" />
+                    More {primaryRecommendation.genres[0]} recommendations ready
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="hidden lg:block">
+              <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(0,0,0,0.38))] p-4 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.85)] backdrop-blur-xl">
+                <div className="relative overflow-hidden rounded-[1.5rem]">
+                  <PosterImage
+                    src={spotlightMovie.backdrop || spotlightMovie.poster}
+                    title={spotlightMovie.title}
+                    className="aspect-[4/5] w-full object-cover"
+                    width={780}
+                    height={975}
+                    sizes="(min-width: 1280px) 24rem, 22rem"
+                    loading="eager"
+                    fetchPriority="high"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/8 to-transparent" />
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="-mt-8 space-y-10 pb-6 lg:-mt-12">
+      <div className="mt-8 space-y-10 pb-6 lg:mt-10">
         {rows.map((row) => (
           <MovieRow
             key={row.title}
@@ -680,6 +831,7 @@ export function Home() {
             navigate={navigate}
             watchlistSet={watchlistSet}
             onSave={handleSaveMovie}
+            browseHref={getBrowseHrefForRow(row.label)}
           />
         ))}
       </div>

@@ -9,3 +9,4 @@ export { Footer } from './Footer';
 export { CinematicGlobe } from './CinematicGlobe';
 export { AppErrorBoundary } from './AppErrorBoundary';
 export { ConfirmModal } from './ConfirmModal';
+export { BrandLogo } from './BrandLogo';

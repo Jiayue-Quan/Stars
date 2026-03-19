@@ -1,0 +1,69 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="88" y1="72" x2="432" y2="456" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D97A47"/>
+      <stop offset="0.52" stop-color="#BF6435"/>
+      <stop offset="1" stop-color="#8E4323"/>
+    </linearGradient>
+
+    <linearGradient id="edge" x1="120" y1="92" x2="398" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2A16A"/>
+      <stop offset="1" stop-color="#7A3519"/>
+    </linearGradient>
+
+    <linearGradient id="starFill" x1="256" y1="148" x2="256" y2="348" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF6E9"/>
+      <stop offset="1" stop-color="#F6E4CB"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(380 118) rotate(133.21) scale(178.643)">
+      <stop stop-color="#FFB37A" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFB37A" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="shadow" x="52" y="56" width="408" height="420" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="18"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.42 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+
+    <filter id="starShadow" x="122" y="118" width="268" height="255" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="8"/>
+      <feGaussianBlur stdDeviation="10"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.301961 0 0 0 0 0.117647 0 0 0 0 0.0392157 0 0 0 0.24 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+
+    <clipPath id="clip">
+      <rect x="96" y="80" width="320" height="320" rx="84"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="96" y="80" width="320" height="320" rx="84" fill="url(#bg)"/>
+    <rect x="98.5" y="82.5" width="315" height="315" rx="81.5" stroke="url(#edge)" stroke-width="5"/>
+
+    <g clip-path="url(#clip)">
+      <ellipse cx="256" cy="240" rx="178" ry="162" fill="#6B2C15" opacity="0.22"/>
+      <ellipse cx="354" cy="118" rx="148" ry="112" fill="url(#glow)"/>
+      <path d="M121 126C179 109 247 111 317 139C366 159 399 190 421 236V80H96V198C101 163 106 139 121 126Z" fill="#F6B184" opacity="0.16"/>
+      <path d="M416 136C382 112 331 104 266 112C316 114 352 127 379 149C392 159 404 176 416 198V136Z" fill="#FFD3B3" opacity="0.18"/>
+      <ellipse cx="256" cy="410" rx="136" ry="46" fill="#4D1D0A" opacity="0.28"/>
+    </g>
+
+    <g filter="url(#starShadow)">
+      <path d="M256 138L284.936 197.492L350.033 207.04L302.848 253.704L313.987 319.46L256 288.52L198.013 319.46L209.152 253.704L161.967 207.04L227.064 197.492L256 138Z" fill="url(#starFill)"/>
+      <path d="M256 148L281.343 200.11L338.362 208.47L297.072 249.291L306.82 306.814L256 279.694L205.18 306.814L214.928 249.291L173.638 208.47L230.657 200.11L256 148Z" stroke="#F6C08B" stroke-width="4" opacity="0.65"/>
+    </g>
+
+    <circle cx="374" cy="122" r="8" fill="#FFF4E6" opacity="0.95"/>
+    <path d="M374 96V111M374 133V148M348 122H363M385 122H400" stroke="#FFF4E6" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  </g>
+</svg>
