@@ -8,6 +8,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { preloadAppRoute } from '@/lib/route-preload';
 import { getUserDisplayName, getUserInitials } from '@/lib/user-display';
 import { useUnreadNotificationsCount } from '@/hooks/use-unread-notifications-count';
+import { useUnreadMessagesCount } from '@/hooks/use-unread-messages-count';
 
 const navLinks = [
   { path: '/', label: 'Home' },
@@ -45,6 +46,7 @@ export function Navbar() {
   const displayName = getUserDisplayName(currentUser);
   const initials = getUserInitials(currentUser);
   const unreadNotificationsCount = useUnreadNotificationsCount(currentUser?.uid);
+  const unreadMessagesCount = useUnreadMessagesCount(currentUser?.uid);
   const showNavbarSearch = location.pathname === '/';
 
   const isActive = (path) => {
@@ -105,8 +107,9 @@ export function Navbar() {
                   <Bell className="h-4 w-4" />
                   {unreadNotificationsCount > 0 ? <span className="absolute -right-1 -top-1 rounded-full bg-[#d26d47] px-1.5 py-0.5 text-[10px] font-semibold text-white">{Math.min(unreadNotificationsCount, 99)}</span> : null}
                 </Link>
-                <Link to="/messages" className="hidden h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
+                <Link to="/messages" className="relative hidden h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.06] sm:flex">
                   <Mail className="h-4 w-4" />
+                  {unreadMessagesCount > 0 ? <span className="absolute -right-1 -top-1 rounded-full bg-[#d26d47] px-1.5 py-0.5 text-[10px] font-semibold text-white">{Math.min(unreadMessagesCount, 99)}</span> : null}
                 </Link>
                 <HoverCard openDelay={120}>
                   <HoverCardTrigger asChild>

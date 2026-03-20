@@ -28,6 +28,17 @@ function clampString(value, maxLength = 280) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
 
+function buildFallbackMovie(movieId) {
+  return {
+    id: movieId,
+    title: 'Unavailable title',
+    year: '',
+    poster: '',
+    posterUrl: '',
+    firstAirYear: '',
+  };
+}
+
 function normalizeReviewEntry(snapshot, movie) {
   const data = snapshot.data() ?? {};
   const rating = Number(data.rating);
@@ -66,10 +77,20 @@ async function hydrateMovies(routeIds) {
     .filter((movieId) => movieId.startsWith('tv-'))
     .map((movieId) => Number(movieId.replace('tv-', '')))
     .filter((movieId) => Number.isFinite(movieId));
-  const remoteMatches = remoteIds.length ? await fetchMoviesByRouteIds(remoteIds) : [];
-  const tvMatches = tvIds.length
-    ? await Promise.all(tvIds.map((id) => fetchTvShowById(id).catch(() => null)))
-    : [];
+  const [remoteMatches, tvMatches] = await Promise.all([
+    remoteIds.length
+      ? fetchMoviesByRouteIds(remoteIds).catch((error) => {
+          console.error('Failed to hydrate remote profile movies', error);
+          return [];
+        })
+      : Promise.resolve([]),
+    tvIds.length
+      ? Promise.all(tvIds.map((id) => fetchTvShowById(id).catch((error) => {
+          console.error(`Failed to hydrate TV profile item ${id}`, error);
+          return null;
+        })))
+      : Promise.resolve([]),
+  ]);
 
   return mapMovieById([
     ...localMatches,
@@ -91,10 +112,10 @@ function mapLibraryItems(routeIds, library, movieMap, limitCount) {
   return routeIds
     .slice(0, limitCount)
     .map((movieId) => {
-      const movie = movieMap.get(movieId);
+      const movie = movieMap.get(movieId) ?? buildFallbackMovie(movieId);
       const entry = library.itemsById[movieId];
 
-      if (!movie || !entry) {
+      if (!entry) {
         return null;
       }
 
@@ -151,18 +172,25 @@ export async function loadProfileReviewEntries(userId, limitCount = 6) {
     return [];
   }
 
-  const movieMap = await hydrateMovies(reviewRefs.map((entry) => entry.movieId));
+  const movieMap = await hydrateMovies(reviewRefs.map((entry) => entry.movieId)).catch((error) => {
+    console.error('Failed to hydrate review movies for profile', error);
+    return new Map();
+  });
   const reviewSnapshots = await Promise.all(
-    reviewRefs.map((entry) => getDoc(doc(db, MOVIE_FEEDBACK_COLLECTION, entry.movieId, 'entries', userId)))
+    reviewRefs.map((entry) => getDoc(doc(db, MOVIE_FEEDBACK_COLLECTION, entry.movieId, 'entries', userId)).catch((error) => {
+      console.error(`Failed to load review entry ${entry.movieId} for profile ${userId}`, error);
+      return null;
+    }))
   );
 
   return reviewSnapshots
     .map((snapshot) => {
-      if (!snapshot.exists()) {
+      if (!snapshot?.exists()) {
         return null;
       }
 
-      return normalizeReviewEntry(snapshot, movieMap.get(snapshot.data()?.movieId || snapshot.id) ?? null);
+      const movieId = snapshot.data()?.movieId || snapshot.id;
+      return normalizeReviewEntry(snapshot, movieMap.get(movieId) ?? buildFallbackMovie(movieId));
     })
     .filter(Boolean)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));

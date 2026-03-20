@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Bell, Bookmark, Camera, Check, Lock, Mail, Shield, Star, UserPlus, UserRound, Users, X } from 'lucide-react';
+import { Bell, Bookmark, Check, Lock, Mail, Shield, Star, UserPlus, UserRound, Users, X } from 'lucide-react';
 import { useAuth } from '@/components/auth/useAuth';
 import { Button } from '@/components/ui/button';
 import { FilterChips, PosterImage } from '@/components/ui-custom';
@@ -13,8 +13,6 @@ import { loadProfileLibrarySections, loadProfileReviewEntries } from '@/lib/prof
 import {
   canMessageProfile,
   canViewerAccessPrivacyLevel,
-  clearProfileAvatarFromStorage,
-  createProfileAvatarUpload,
   ensureUserProfile,
   getFollowState,
   getProfilePath,
@@ -62,6 +60,16 @@ function formatActivityDate(value) {
   return Number.isNaN(parsed.getTime())
     ? 'Recently'
     : parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatPrivacyLabel(value) {
+  return typeof value === 'string' && value ? value.replaceAll('_', ' ') : 'Unavailable';
+}
+
+function getFavoriteGenreLabels(profile) {
+  return Array.isArray(profile?.favoriteGenres) && profile.favoriteGenres.length
+    ? profile.favoriteGenres
+    : ['No favorite genres set'];
 }
 
 function SectionCard({ title, description, action, children }) {
@@ -175,18 +183,6 @@ export function Profile() {
     recentNotifications: [],
   });
   const [saveState, setSaveState] = useState({ type: '', message: '' });
-  const [avatarState, setAvatarState] = useState({
-    isUploading: false,
-    progress: null,
-    stage: 'idle',
-    message: '',
-    error: '',
-    selectedFileName: '',
-    canRetry: false,
-  });
-  const avatarInputRef = useRef(null);
-  const avatarUploadRef = useRef(null);
-  const lastAvatarFileRef = useRef(null);
   const [editForm, setEditForm] = useState({
     username: '',
     bio: '',
@@ -218,9 +214,6 @@ export function Profile() {
     }));
   }, [profile]);
 
-  useEffect(() => () => {
-    avatarUploadRef.current?.cancel?.();
-  }, []);
 
   useEffect(() => {
     if (!profile?.publicProfileId || !routeUserId || routeUserId === profile.publicProfileId) {
@@ -391,144 +384,7 @@ export function Profile() {
   const visibleProfile = isOwner && currentUser?.photoURL
     ? { ...profile, avatarUrl: currentUser.photoURL }
     : profile;
-  const avatarOverlayLabel = avatarState.isUploading
-    ? avatarState.progress && avatarState.progress > 0
-      ? `${avatarState.progress}%`
-      : 'Uploading'
-    : 'Edit';
-
-  async function handleAvatarSelection(file) {
-    if (!currentUser?.uid || !file) {
-      return;
-    }
-
-    if (avatarUploadRef.current) {
-      return;
-    }
-
-    lastAvatarFileRef.current = file;
-    let uploadResult = null;
-
-    setAvatarState({
-      isUploading: true,
-      progress: null,
-      stage: 'starting',
-      message: '',
-      error: '',
-      selectedFileName: file.name || 'avatar',
-      canRetry: false,
-    });
-
-    try {
-      const existingProfile = await ensureUserProfile(currentUser);
-      avatarUploadRef.current = createProfileAvatarUpload(currentUser.uid, file, {
-        onProgress(progress) {
-          setAvatarState((current) => ({
-            ...current,
-            progress,
-            stage: 'uploading',
-          }));
-        },
-        onStateChange(stage) {
-          setAvatarState((current) => ({
-            ...current,
-            stage,
-          }));
-        },
-        logger: console,
-      });
-      uploadResult = await avatarUploadRef.current.promise;
-
-      const nextProfile = await updateUserProfile(currentUser.uid, {
-        username: existingProfile?.username || currentUser.displayName || 'Signed in',
-        bio: existingProfile?.bio || '',
-        avatarUrl: uploadResult.avatarUrl,
-        avatarStoragePath: uploadResult.avatarStoragePath,
-        favoriteGenres: existingProfile?.favoriteGenres || [],
-        privacy: existingProfile?.privacy || {},
-      });
-
-      await updateAuthProfileFields({
-        displayName: nextProfile.username,
-        photoURL: nextProfile.avatarUrl,
-      });
-      updateCurrentUser({
-        ...currentUser,
-        displayName: nextProfile.username,
-        photoURL: nextProfile.avatarUrl,
-      });
-      await syncProfileIdentityReferences(currentUser.uid, nextProfile);
-
-      if (existingProfile?.avatarStoragePath && existingProfile.avatarStoragePath !== uploadResult.avatarStoragePath) {
-        await clearProfileAvatarFromStorage(existingProfile.avatarStoragePath);
-      }
-
-      await refreshCurrentUser();
-      reloadProfile();
-      setAvatarState({
-        isUploading: false,
-        progress: 100,
-        stage: 'complete',
-        message: 'Avatar updated successfully.',
-        error: '',
-        selectedFileName: '',
-        canRetry: false,
-      });
-      toast({
-        title: 'Avatar updated',
-        description: 'Your new profile image is now live.',
-        variant: 'success',
-      });
-    } catch (error) {
-      console.error('Failed to update avatar', error?.diagnostics || error);
-      if (uploadResult?.avatarStoragePath) {
-        await clearProfileAvatarFromStorage(uploadResult.avatarStoragePath);
-      }
-      setAvatarState({
-        isUploading: false,
-        progress: null,
-        stage: 'error',
-        message: '',
-        error: error?.userMessage || error?.message || 'Please try again in a moment.',
-        selectedFileName: file.name || 'avatar',
-        canRetry: Boolean(lastAvatarFileRef.current),
-      });
-      toast({
-        title: 'Avatar update failed',
-        description: error?.userMessage || error?.message || 'Please try again in a moment.',
-        variant: 'destructive',
-      });
-      if (error?.diagnostics) {
-        console.error('Avatar upload diagnostics', error.diagnostics);
-      }
-    } finally {
-      avatarUploadRef.current = null;
-    }
-  }
-
-  function handleCancelAvatarUpload() {
-    if (!avatarUploadRef.current) {
-      return;
-    }
-
-    avatarUploadRef.current.cancel();
-    avatarUploadRef.current = null;
-    setAvatarState({
-      isUploading: false,
-      progress: null,
-      stage: 'canceled',
-      message: '',
-      error: 'Avatar upload was canceled.',
-      selectedFileName: lastAvatarFileRef.current?.name || '',
-      canRetry: Boolean(lastAvatarFileRef.current),
-    });
-  }
-
-  function handleRetryAvatarUpload() {
-    if (lastAvatarFileRef.current && !avatarUploadRef.current) {
-      void handleAvatarSelection(lastAvatarFileRef.current);
-    }
-  }
+  const topReview = contentState.reviewItems[0] ?? null;
 
   async function handleSaveProfile() {
     if (!currentUser?.uid) {
@@ -736,40 +592,7 @@ export function Profile() {
         <section className="rounded-[2rem] border border-white/[0.08] bg-[linear-gradient(145deg,rgba(26,20,17,0.92),rgba(14,11,10,0.98))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.2)]">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex flex-col gap-5 sm:flex-row">
-              {isOwner ? (
-                <div className="group relative">
-                  <button
-                    type="button"
-                    className="relative block overflow-hidden rounded-full focus:outline-none focus:ring-2 focus:ring-[#d26d47]/55 focus:ring-offset-2 focus:ring-offset-[#120f0d]"
-                    onClick={() => avatarInputRef.current?.click()}
-                    disabled={avatarState.isUploading}
-                  >
-                    <ProfileAvatar profile={visibleProfile} className="h-24 w-24 text-3xl" />
-                    <div className={`absolute inset-0 flex items-center justify-center rounded-full bg-black/55 text-white transition-all ${avatarState.isUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                      <div className="flex flex-col items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.18em]">
-                        <Camera className="h-4 w-4" />
-                        <span>{avatarOverlayLabel}</span>
-                      </div>
-                    </div>
-                  </button>
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    className="hidden"
-                    disabled={avatarState.isUploading}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      event.target.value = '';
-                      if (file) {
-                        void handleAvatarSelection(file);
-                      }
-                    }}
-                  />
-                </div>
-              ) : (
-                <ProfileAvatar profile={visibleProfile} className="h-24 w-24 text-3xl" />
-              )}
+              <ProfileAvatar profile={visibleProfile} className="h-24 w-24 text-3xl" />
               <div>
                 <p className="section-kicker">{isOwner ? 'Your profile' : 'Public profile'}</p>
                 <h1 className="heading-display mt-2 text-4xl text-white">{profile.username}</h1>
@@ -778,7 +601,7 @@ export function Profile() {
                   <>
                     <p className="mt-4 max-w-2xl text-sm leading-7 text-white/72">{profile.bio || (isOwner ? 'Add a bio so people know what you watch and review.' : `${profile.username} has not added a bio yet.`)}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      {(profile.favoriteGenres.length ? profile.favoriteGenres : ['No favorite genres set']).map((genre) => (
+                      {getFavoriteGenreLabels(profile).map((genre) => (
                         <span key={genre} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/72">{genre}</span>
                       ))}
                     </div>
@@ -824,42 +647,8 @@ export function Profile() {
             <div className="space-y-8">
               <SectionCard
                 title="Account settings"
-                description="Update your public profile, privacy defaults, avatar, and password."
+                description="Update your public profile, privacy defaults, and password."
               >
-                <p className="mb-4 text-sm text-white/58">Click your profile picture above to upload a new avatar.</p>
-                {avatarState.isUploading ? (
-                  <div className="mb-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-white">
-                          {avatarState.stage === 'starting' ? 'Preparing avatar upload...' : 'Uploading avatar...'}
-                        </p>
-                        <p className="mt-1 text-xs text-white/50">{avatarState.selectedFileName}</p>
-                      </div>
-                      <Button className="btn-outline rounded-full px-4 py-2 text-sm" onClick={() => handleCancelAvatarUpload()}>
-                        Cancel
-                      </Button>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className={`h-full rounded-full bg-[linear-gradient(90deg,#d26d47,#ff9c6c)] transition-all ${avatarState.progress === null ? 'w-1/3 animate-pulse' : ''}`}
-                        style={avatarState.progress === null ? undefined : { width: `${avatarState.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                {avatarState.message ? <p className="mb-4 text-sm text-emerald-300">{avatarState.message}</p> : null}
-                {avatarState.error ? <p className="mb-4 text-sm text-red-200">{avatarState.error}</p> : null}
-                {!avatarState.isUploading && avatarState.error ? (
-                  <p className="mb-4 text-xs text-white/45">Open the browser console for Firebase upload diagnostics if this happens again.</p>
-                ) : null}
-                {!avatarState.isUploading && avatarState.canRetry ? (
-                  <div className="mb-4">
-                    <Button className="btn-outline rounded-full px-4 py-2 text-sm" onClick={() => handleRetryAvatarUpload()}>
-                      Retry avatar upload
-                    </Button>
-                  </div>
-                ) : null}
                 <div className="grid gap-5">
                   <label className="block">
                     <span className="text-xs uppercase tracking-[0.24em] text-white/50">Username</span>
@@ -905,7 +694,7 @@ export function Profile() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <Button className="btn-primary" onClick={() => void handleSaveProfile()} disabled={isSavingProfile || avatarState.isUploading}>
+                  <Button className="btn-primary" onClick={() => void handleSaveProfile()} disabled={isSavingProfile}>
                     {isSavingProfile ? 'Saving...' : 'Save profile'}
                   </Button>
                   <Button className="btn-outline" onClick={() => void handleLogout()}>Logout</Button>
@@ -976,8 +765,8 @@ export function Profile() {
                   <div className="mt-4 space-y-3">
                     {contentState.recentNotifications.map((notification) => (
                       <div key={notification.id} className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
-                        <p className="text-sm text-white">{notification.message}</p>
-                        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/40">{notification.type.replaceAll('_', ' ')}</p>
+                        <p className="text-sm text-white">{notification.message || 'New activity on your account.'}</p>
+                        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/40">{formatPrivacyLabel(notification.type)}</p>
                       </div>
                     ))}
                   </div>
@@ -991,11 +780,11 @@ export function Profile() {
                   <h2 className="text-xl font-semibold text-white">Privacy snapshot</h2>
                 </div>
                 <div className="mt-4 space-y-3 text-sm text-white/72">
-                  <p>Profile: {profile.privacy.profileVisibility.replaceAll('_', ' ')}</p>
-                  <p>Messages: {profile.privacy.whoCanMessage.replaceAll('_', ' ')}</p>
-                  <p>Reviews: {profile.privacy.reviewsVisibility.replaceAll('_', ' ')}</p>
-                  <p>Lists: {profile.privacy.listsVisibility.replaceAll('_', ' ')}</p>
-                  <p>Activity: {profile.privacy.activityVisibility.replaceAll('_', ' ')}</p>
+                  <p>Profile: {formatPrivacyLabel(profile.privacy?.profileVisibility)}</p>
+                  <p>Messages: {formatPrivacyLabel(profile.privacy?.whoCanMessage)}</p>
+                  <p>Reviews: {formatPrivacyLabel(profile.privacy?.reviewsVisibility)}</p>
+                  <p>Lists: {formatPrivacyLabel(profile.privacy?.listsVisibility)}</p>
+                  <p>Activity: {formatPrivacyLabel(profile.privacy?.activityVisibility)}</p>
                 </div>
               </div>
 
@@ -1076,10 +865,10 @@ export function Profile() {
                   <h2 className="text-xl font-semibold text-white">Privacy</h2>
                 </div>
                 <div className="mt-4 space-y-3 text-sm text-white/72">
-                  <p>Profile visibility: {profile.privacy.profileVisibility.replaceAll('_', ' ')}</p>
-                  <p>Reviews visibility: {profile.privacy.reviewsVisibility.replaceAll('_', ' ')}</p>
-                  <p>Lists visibility: {profile.privacy.listsVisibility.replaceAll('_', ' ')}</p>
-                  <p>Activity visibility: {profile.privacy.activityVisibility.replaceAll('_', ' ')}</p>
+                  <p>Profile visibility: {formatPrivacyLabel(profile.privacy?.profileVisibility)}</p>
+                  <p>Reviews visibility: {formatPrivacyLabel(profile.privacy?.reviewsVisibility)}</p>
+                  <p>Lists visibility: {formatPrivacyLabel(profile.privacy?.listsVisibility)}</p>
+                  <p>Activity visibility: {formatPrivacyLabel(profile.privacy?.activityVisibility)}</p>
                 </div>
               </div>
 
@@ -1096,15 +885,15 @@ export function Profile() {
                 </div>
               ) : null}
 
-              {contentState.reviewItems.length > 0 ? (
+              {topReview ? (
                 <div className="rounded-[2rem] border border-white/[0.08] bg-white/[0.03] p-6">
                   <div className="flex items-center gap-3">
                     <Star className="h-5 w-5 text-[#f4b684]" />
                     <h2 className="text-xl font-semibold text-white">Top review pick</h2>
                   </div>
-                  <Link to={`/review/${contentState.reviewItems[0].movieId}`} className="mt-4 block rounded-2xl border border-white/[0.08] bg-black/20 p-4 transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.04]">
-                    <p className="font-medium text-white">{contentState.reviewItems[0].movie?.title || 'Untitled title'}</p>
-                    <p className="mt-2 line-clamp-4 text-sm leading-6 text-white/70">{contentState.reviewItems[0].reviewText || 'Rated without a written review.'}</p>
+                  <Link to={`/review/${topReview.movieId}`} className="mt-4 block rounded-2xl border border-white/[0.08] bg-black/20 p-4 transition-all hover:border-[#d26d47]/35 hover:bg-white/[0.04]">
+                    <p className="font-medium text-white">{topReview.movie?.title || 'Untitled title'}</p>
+                    <p className="mt-2 line-clamp-4 text-sm leading-6 text-white/70">{topReview.reviewText || 'Rated without a written review.'}</p>
                   </Link>
                 </div>
               ) : null}

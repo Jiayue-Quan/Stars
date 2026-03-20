@@ -105,14 +105,23 @@ export function ProfileConnections() {
       return;
     }
 
-    const response = await listRelationships(resolvedUserId, kind, state.cursor);
-    setState((current) => ({
-      items: [...current.items, ...response.items],
-      cursor: response.cursor,
-      hasMore: response.hasMore,
-      isLoading: false,
-      error: '',
-    }));
+    try {
+      const response = await listRelationships(resolvedUserId, kind, state.cursor);
+      setState((current) => ({
+        items: [...current.items, ...response.items],
+        cursor: response.cursor,
+        hasMore: response.hasMore,
+        isLoading: false,
+        error: '',
+      }));
+    } catch (error) {
+      console.error(`Failed to load more ${kind}`, error);
+      setState((current) => ({
+        ...current,
+        isLoading: false,
+        error: 'This connection list could not be extended right now.',
+      }));
+    }
   }
 
   if (!['followers', 'following'].includes(kind || '')) {

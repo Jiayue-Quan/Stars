@@ -5,14 +5,14 @@ import { getProfilePath, listNotifications, markNotificationsRead } from '@/lib/
 
 export function Notifications() {
   const { currentUser } = useAuth();
-  const [state, setState] = useState({ items: [], cursor: null, hasMore: false, isLoading: true });
+  const [state, setState] = useState({ items: [], cursor: null, hasMore: false, isLoading: true, error: '' });
 
   useEffect(() => {
     let cancelled = false;
     if (!currentUser?.uid) {
       queueMicrotask(() => {
         if (!cancelled) {
-          setState({ items: [], cursor: null, hasMore: false, isLoading: false });
+          setState({ items: [], cursor: null, hasMore: false, isLoading: false, error: '' });
         }
       });
       return () => {
@@ -23,7 +23,7 @@ export function Notifications() {
     void listNotifications(currentUser.uid)
       .then(async (response) => {
         if (!cancelled) {
-          setState({ ...response, isLoading: false });
+          setState({ ...response, isLoading: false, error: '' });
         }
 
         const unreadIds = response.items.filter((item) => !item.read).map((item) => item.id);
@@ -34,7 +34,7 @@ export function Notifications() {
       .catch((error) => {
         console.error('Failed to load notifications', error);
         if (!cancelled) {
-          setState({ items: [], cursor: null, hasMore: false, isLoading: false });
+          setState({ items: [], cursor: null, hasMore: false, isLoading: false, error: 'Notifications could not be loaded right now.' });
         }
       });
 
@@ -44,13 +44,27 @@ export function Notifications() {
   }, [currentUser?.uid]);
 
   async function loadMore() {
-    const response = await listNotifications(currentUser.uid, state.cursor);
-    setState((current) => ({
-      items: [...current.items, ...response.items],
-      cursor: response.cursor,
-      hasMore: response.hasMore,
-      isLoading: false,
-    }));
+    if (!currentUser?.uid) {
+      return;
+    }
+
+    try {
+      const response = await listNotifications(currentUser.uid, state.cursor);
+      setState((current) => ({
+        items: [...current.items, ...response.items],
+        cursor: response.cursor,
+        hasMore: response.hasMore,
+        isLoading: false,
+        error: '',
+      }));
+    } catch (error) {
+      console.error('Failed to load more notifications', error);
+      setState((current) => ({
+        ...current,
+        isLoading: false,
+        error: 'More notifications could not be loaded right now.',
+      }));
+    }
   }
 
   return (
@@ -66,6 +80,8 @@ export function Notifications() {
             </div>
           ) : state.isLoading ? (
             <p className="mt-6 text-sm text-white/55">Loading notifications...</p>
+          ) : state.error ? (
+            <p className="mt-6 text-sm text-red-200">{state.error}</p>
           ) : state.items.length === 0 ? (
             <p className="mt-6 text-sm text-white/55">No notifications yet.</p>
           ) : (

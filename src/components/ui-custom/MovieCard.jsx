@@ -74,21 +74,21 @@ export const MovieCard = memo(function MovieCard({ movie, variant = 'default', o
                   {titleText}
                 </h3>
                 <p className="mt-1 line-clamp-1 text-xs text-white/58">{movie.genres.slice(0, 2).join(' / ')}</p>
-                <div className="mt-3 translate-y-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+                <div className="mt-3 opacity-100 transition-all duration-300 md:translate-y-4 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100">
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={(event) => {
                         event.stopPropagation();
                         onPlay?.();
-                    }} className="flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-[11px] font-semibold text-black transition-colors hover:bg-white/92">
+                    }} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white px-3 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-black shadow-[0_18px_40px_rgba(255,255,255,0.14)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/94">
                       <Play className="h-3.5 w-3.5 fill-current"/>
                       Watch Trailer
                     </button>
                     {saveAction && (<button type="button" onClick={(event) => {
                             event.stopPropagation();
                             saveAction();
-                        }} className={`flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold transition-colors ${isInWatchlist
-                            ? 'border-[#d26d47]/50 bg-[#d26d47]/18 text-[#f4c3a4]'
-                            : 'border-white/15 bg-black/40 text-white hover:bg-black/55'}`}>
+                        }} className={`flex min-h-12 items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-[12px] font-semibold uppercase tracking-[0.16em] backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 ${isInWatchlist
+                            ? 'border-[#d26d47]/45 bg-[#d26d47]/16 text-[#f4c3a4] shadow-[0_14px_34px_rgba(210,109,71,0.12)]'
+                            : 'border-white/12 bg-black/26 text-white hover:border-white/20 hover:bg-black/38'}`}>
                         <Bookmark className="h-3.5 w-3.5"/>
                         {isInWatchlist ? 'Saved' : 'My List'}
                       </button>)}
