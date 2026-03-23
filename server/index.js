@@ -70,13 +70,6 @@ app.use('/api/tmdb', async (req, res) => {
   }
 });
 
-// Fallback to frontend for client-side routing
-app.get('*', (req, res) => {
-  res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
-});
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
